@@ -1,0 +1,13 @@
+# Gizli bilgiler — ASLA commit'lenmez
+config.json
+*.json.bak
+
+# Derleme çıktıları
+/ai-tempo
+/ai-kota-sorgulama
+*.app/
+
+# macOS / editör
+.DS_Store
+.vscode/
+.idea/
