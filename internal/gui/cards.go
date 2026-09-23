@@ -124,6 +124,9 @@ func createAccountTab(account config.Account) *accountTabHandle {
 				c.update(m.Percent, m.ResetsInfo, m.TimeProgress)
 				body.Add(c.container)
 			}
+			if info.ResetCredits != nil {
+				body.Add(newResetCreditsCard(account, info.ResetCredits))
+			}
 		}
 		if loading && info != nil {
 			hint := canvas.NewText("Yenileniyor…", colorMuted)

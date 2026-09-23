@@ -75,6 +75,14 @@ penceredeki **⚙ Ayarlar** düğmesi. Buradan:
 - Süresi dolan anahtarı **Düzenle** → yeni anahtarı yapıştırarak yenilersiniz
   (alan boş bırakılırsa mevcut anahtar korunur)
 - **Otomatik yenileme** aralığını seçersiniz (5 / 10 / 15 / 30 / 60 dk)
+- Hesap düzenleyicideki **Gelişmiş** bölümünden sağlayıcıya özel seçenekleri
+  açarsınız. ChatGPT için: **Codex sıfırlama haklarını göster**. Açıkken
+  ChatGPT sekmesinde "Kullanım limiti yenileme hakları" kartı görünür:
+  - **Kullanılabilir**: kullanılabilir haklar ve bitiş zamanları
+    (`backend-api/wham/rate-limit-reset-credits`; her yenilemede ek bir istek).
+  - **Geçmiş**: son 30 günde alınan/kullanılan haklar
+    (`…/rate-limit-reset-credits/history`). Geçmiş otomatik yenilemede
+    çekilmez; yalnızca bu sekme açılınca sorgulanır ve 10 dk bellekte tutulur.
 
 **Nerede saklanır?**
 

@@ -58,6 +58,13 @@ func (t *trayMenu) rebuild() {
 				}
 				items = append(items, fyne.NewMenuItem(line, openTab))
 			}
+			if rc := info.ResetCredits; rc != nil && rc.Error == "" {
+				line := fmt.Sprintf("    🎟 Sıfırlama hakkı: %d", len(rc.Available))
+				if len(rc.Available) > 0 {
+					line += " · bitiş " + provider.ShortDateTime(rc.Available[0].ExpiresAt)
+				}
+				items = append(items, fyne.NewMenuItem(line, openTab))
+			}
 		}
 		items = append(items, fyne.NewMenuItemSeparator())
 	}

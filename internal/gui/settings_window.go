@@ -212,6 +212,14 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 	keyHelp.Wrapping = fyne.TextWrapWord
 	orgHelp.Wrapping = fyne.TextWrapWord
 
+	// Gelişmiş: sağlayıcıya özel ek seçenekler (şimdilik yalnızca ChatGPT).
+	resetCreditsCheck := widget.NewCheck("Codex sıfırlama haklarını göster", nil)
+	resetCreditsCheck.SetChecked(acc.ShowResetCredits)
+	advanced := widget.NewAccordion(widget.NewAccordionItem("Gelişmiş", container.NewVBox(
+		resetCreditsCheck,
+		hintText("Kullanılabilir ücretsiz limit sıfırlama hakkı sayısını ve son kullanma tarihini gösterir. Her yenilemede ek bir istek yapar."),
+	)))
+
 	providerSelect := widget.NewSelect(providerNames, nil)
 	providerSelect.OnChanged = func(sel string) {
 		for i, n := range providerNames {
@@ -227,6 +235,11 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 		} else {
 			orgEntry.Enable()
 		}
+		if acc.Provider == "chatgpt" {
+			advanced.Show()
+		} else {
+			advanced.Hide()
+		}
 	}
 	providerSelect.SetSelected(provider.Get(acc.Provider).DisplayName())
 
@@ -240,18 +253,20 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 		widget.NewFormItem("Organization ID", container.NewVBox(orgEntry, orgHelp)),
 		widget.NewFormItem("", enabledCheck),
 	)
+	editor := container.NewVBox(form, advanced)
 
 	title := "Hesap Ekle"
 	if existing != nil {
 		title = "Hesabı Düzenle"
 	}
-	d := dialog.NewCustomConfirm(title, "Kaydet", "Vazgeç", container.NewPadded(form), func(ok bool) {
+	d := dialog.NewCustomConfirm(title, "Kaydet", "Vazgeç", container.NewPadded(editor), func(ok bool) {
 		if !ok {
 			return
 		}
 		acc.Name = strings.TrimSpace(nameEntry.Text)
 		acc.OrganizationID = strings.TrimSpace(orgEntry.Text)
 		acc.Enabled = enabledCheck.Checked
+		acc.ShowResetCredits = acc.Provider == "chatgpt" && resetCreditsCheck.Checked
 		key := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(keyEntry.Text), "Bearer "))
 		if acc.Provider == "cursor" {
 			acc.OrganizationID = ""

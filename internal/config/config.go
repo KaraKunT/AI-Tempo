@@ -27,6 +27,9 @@ type Account struct {
 	OrganizationID string `json:"organization_id"`
 	Enabled        bool   `json:"enabled"`
 	SessionKey     string `json:"-"`
+
+	// Gelişmiş (sağlayıcıya özel) seçenekler.
+	ShowResetCredits bool `json:"show_reset_credits,omitempty"` // ChatGPT: Codex sıfırlama hakları
 }
 
 // Settings, uygulamanın kalıcı ayarlarıdır

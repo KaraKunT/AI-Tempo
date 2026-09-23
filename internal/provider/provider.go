@@ -4,6 +4,7 @@ package provider
 
 import (
 	"context"
+	"time"
 
 	"ai-tempo/internal/config"
 )
@@ -27,6 +28,21 @@ type RateLimitInfo struct {
 	Success     bool
 	Error       string
 	Metrics     []UsageMetric
+	// ResetCredits, ChatGPT Codex limit sıfırlama haklarıdır; yalnızca hesapta
+	// "Codex sıfırlama haklarını göster" açıksa doldurulur.
+	ResetCredits *ResetCredits
+}
+
+// ResetCredits, kullanılabilir limit sıfırlama haklarıdır.
+type ResetCredits struct {
+	Available []ResetCredit // bitiş tarihi en yakın olan başta
+	Error     string        // alınamadıysa hata; ana kota yine gösterilir
+}
+
+// ResetCredit, tek bir kullanılabilir sıfırlama hakkıdır.
+type ResetCredit struct {
+	Title     string // örn. "Tam sıfırlama"
+	ExpiresAt time.Time
 }
 
 // Provider, sorgulanabilir bir AI servisini (Claude, Cursor, ChatGPT, ...) temsil eder.

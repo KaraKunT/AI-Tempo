@@ -94,3 +94,34 @@ func timeProgress(resetAt time.Time, windowSeconds float64) float64 {
 func parseUnixMilliString(s string) (int64, error) {
 	return strconv.ParseInt(s, 10, 64)
 }
+
+// ShortDate, bir zamanı yerel saatte "23 Eyl" biçiminde yazar.
+func ShortDate(t time.Time) string {
+	t = t.In(time.Local)
+	return fmt.Sprintf("%d %s", t.Day(), turkishMonths[t.Month()-1])
+}
+
+// ShortDateTime, bir zamanı yerel saatte "23 Eki 00:08" biçiminde yazar.
+func ShortDateTime(t time.Time) string {
+	return ShortDate(t) + " " + t.In(time.Local).Format("15:04")
+}
+
+// ClockWithZone, bir zamanı yerel saatte "00:08 GMT+3" biçiminde yazar.
+func ClockWithZone(t time.Time) string {
+	t = t.In(time.Local)
+	_, offset := t.Zone()
+	zone := "GMT"
+	if h, m := offset/3600, (offset%3600)/60; m != 0 {
+		zone += fmt.Sprintf("%+d:%02d", h, abs(m))
+	} else if h != 0 {
+		zone += fmt.Sprintf("%+d", h)
+	}
+	return t.Format("15:04") + " " + zone
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}

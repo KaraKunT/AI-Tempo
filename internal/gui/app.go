@@ -30,6 +30,7 @@ var store = usage.Default
 func onStoreChange(f func()) { store.OnChange(func() { fyne.Do(f) }) }
 
 var (
+	mainWindow   fyne.Window
 	tabContainer *container.AppTabs
 	accountTabs  []*accountTabHandle
 	mainBody     *fyne.Container
@@ -49,7 +50,7 @@ func Run() {
 	myApp.Settings().SetTheme(modernTheme{})
 	prefs := myApp.Preferences()
 
-	mainWindow := myApp.NewWindow("")
+	mainWindow = myApp.NewWindow("")
 	mainWindow.SetTitle("AI Tempo")
 
 	width := prefs.FloatWithFallback(prefWindowWidth, defaultWidth)
