@@ -29,7 +29,10 @@ func newTrayMenu(desk desktop.App, onShow func(tabIndex int), onSettings, onQuit
 }
 
 func (t *trayMenu) rebuild() {
-	var items []*fyne.MenuItem
+	items := []*fyne.MenuItem{
+		fyne.NewMenuItem("Pencereyi Göster", func() { t.onShow(-1) }),
+		fyne.NewMenuItemSeparator(),
+	}
 	accounts := config.EnabledAccounts()
 	for i, acc := range accounts {
 		idx := i

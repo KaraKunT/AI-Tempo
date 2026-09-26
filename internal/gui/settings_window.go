@@ -34,6 +34,52 @@ var providerHelp = map[string]struct{ key, org string }{
 	},
 }
 
+// consoleSnippets, her sağlayıcının sitesinde tarayıcı konsoluna yapıştırıldığında
+// anahtarı/ID'yi tam haliyle yazdıran kodlardır. HttpOnly cookie'ler JavaScript'ten
+// okunamaz; o durumda kod, değerin nereden alınacağını yazar.
+var consoleSnippets = map[string]struct{ site, code string }{
+	"chatgpt": {"chatgpt.com", `fetch('/api/auth/session').then(r => r.json()).then(s => {
+  const id = s.account?.id || JSON.parse(atob(s.accessToken.split('.')[1]))['https://api.openai.com/auth'].chatgpt_account_id;
+  console.log('TOKEN:\n' + s.accessToken + '\n\nACCOUNT ID:\n' + id + '\n\nBitiş: ' + new Date(s.expires).toLocaleString());
+  copy(s.accessToken);
+});`},
+	"claude": {"claude.ai", `fetch('/api/organizations').then(r => r.json()).then(orgs => {
+  orgs.forEach(o => console.log('ORGANIZATION ID (' + o.name + '):\n' + o.uuid));
+  const m = document.cookie.match(/(?:^|; )sessionKeyV3=([^;]+)/);
+  if (m) { console.log('SESSION KEY:\n' + m[1]); copy(m[1]); }
+  else console.log('sessionKeyV3 HttpOnly; Application → Cookies → claude.ai içinden kopyalayın.');
+});`},
+	"cursor": {"cursor.com", `(() => {
+  const m = document.cookie.match(/(?:^|; )WorkosCursorSessionToken=([^;]+)/);
+  if (m) { const t = decodeURIComponent(m[1]); console.log('TOKEN:\n' + t); copy(t); }
+  else console.log('WorkosCursorSessionToken HttpOnly; Application → Cookies → cursor.com içinden kopyalayın.');
+})();`},
+}
+
+// showConsoleSnippet, sağlayıcının konsol kodunu kopyalanabilir bir metin alanında gösterir.
+func showConsoleSnippet(parent fyne.Window, providerID string) {
+	sn, ok := consoleSnippets[providerID]
+	if !ok {
+		return
+	}
+	code := widget.NewMultiLineEntry()
+	code.SetText(sn.code)
+	code.Wrapping = fyne.TextWrapBreak
+	code.SetMinRowsVisible(7)
+	copyBtn := widget.NewButtonWithIcon("Panoya Kopyala", theme.ContentCopyIcon(), func() {
+		fyne.CurrentApp().Clipboard().SetContent(sn.code)
+	})
+	copyBtn.Importance = widget.HighImportance
+	content := container.NewVBox(
+		hintText(sn.site+" açıkken Geliştirici Araçları → Console sekmesine yapıştırıp Enter'a basın. Değerler tam olarak yazılır, anahtar okunabiliyorsa panoya da kopyalanır."),
+		code,
+		container.NewCenter(copyBtn),
+	)
+	d := dialog.NewCustom(provider.Get(providerID).DisplayName()+" Konsol Kodu", "Kapat", content, parent)
+	d.Resize(fyne.NewSize(560, 400))
+	d.Show()
+}
+
 var settingsWindow fyne.Window
 
 // showSettings, ayarlar penceresini açar (zaten açıksa öne getirir).
@@ -161,7 +207,7 @@ func showSettings(app fyne.App, onChanged func()) {
 	general := newRoundedCard(container.NewVBox(
 		sectionTitle("Genel"),
 		widget.NewForm(widget.NewFormItem("Otomatik yenileme", refreshSelect)),
-		hintText("Her hesap bu aralıkla, sırayla sorgulanır. Hata alan hesaplarda aralık otomatik uzar."),
+		hintText("Her hesap bu aralıkla, sırayla sorgulanır. Üst üste 5 kez hata alan hesap otomatik sorgulanmaz; sayacı hesabın sekmesinden sıfırlayabilirsiniz."),
 	))
 
 	accountsHeader := container.NewBorder(nil, nil, sectionTitle("Hesaplar"), addBtn)
@@ -220,6 +266,11 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 		hintText("Kullanılabilir ücretsiz limit sıfırlama hakkı sayısını ve son kullanma tarihini gösterir. Her yenilemede ek bir istek yapar."),
 	)))
 
+	snippetBtn := widget.NewButtonWithIcon("Konsoldan al", theme.ContentCopyIcon(), func() {
+		showConsoleSnippet(parent, acc.Provider)
+	})
+	snippetBtn.Importance = widget.LowImportance
+
 	providerSelect := widget.NewSelect(providerNames, nil)
 	providerSelect.OnChanged = func(sel string) {
 		for i, n := range providerNames {
@@ -249,7 +300,7 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 	form := widget.NewForm(
 		widget.NewFormItem("Sağlayıcı", providerSelect),
 		widget.NewFormItem("İsim", nameEntry),
-		widget.NewFormItem("Oturum anahtarı", container.NewVBox(keyEntry, keyHelp)),
+		widget.NewFormItem("Oturum anahtarı", container.NewVBox(keyEntry, keyHelp, container.NewHBox(snippetBtn))),
 		widget.NewFormItem("Organization ID", container.NewVBox(orgEntry, orgHelp)),
 		widget.NewFormItem("", enabledCheck),
 	)

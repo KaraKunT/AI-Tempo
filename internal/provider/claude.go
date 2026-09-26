@@ -67,8 +67,12 @@ func (claudeProvider) Query(ctx context.Context, account config.Account) RateLim
 		return info
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		info.Error = "Session süresi dolmuş"
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		info.Error = fmt.Sprintf("Session süresi dolmuş (HTTP %d)", resp.StatusCode)
+		return info
+	case resp.StatusCode != http.StatusOK:
+		info.Error = fmt.Sprintf("Sunucu hatası (HTTP %d)", resp.StatusCode)
 		return info
 	}
 

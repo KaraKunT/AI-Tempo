@@ -88,7 +88,7 @@ func (chatgptProvider) Query(ctx context.Context, account config.Account) RateLi
 	var metrics []UsageMetric
 	if w := response.RateLimit.PrimaryWindow; w != nil {
 		metrics = append(metrics, UsageMetric{
-			Label:        "Kullanım Limiti",
+			Label:        chatgptWindowLabel(w.LimitWindowSeconds, "Kullanım Limiti"),
 			Subtitle:     chatgptWindowSubtitle(w.LimitWindowSeconds),
 			Percent:      w.UsedPercent,
 			ResetsInfo:   formatResetTimeUnixSeconds(w.ResetAt),
@@ -97,7 +97,7 @@ func (chatgptProvider) Query(ctx context.Context, account config.Account) RateLi
 	}
 	if w := response.RateLimit.SecondaryWindow; w != nil {
 		metrics = append(metrics, UsageMetric{
-			Label:        "İkincil Limit",
+			Label:        chatgptWindowLabel(w.LimitWindowSeconds, "İkincil Limit"),
 			Subtitle:     chatgptWindowSubtitle(w.LimitWindowSeconds),
 			Percent:      w.UsedPercent,
 			ResetsInfo:   formatResetTimeUnixSeconds(w.ResetAt),
@@ -228,6 +228,18 @@ func parseChatGPTResetHistory(body []byte) (ResetHistory, error) {
 	}
 	sort.Slice(h.Events, func(i, j int) bool { return h.Events[i].At.After(h.Events[j].At) })
 	return h, nil
+}
+
+// chatgptWindowLabel, pencere uzunluğu bilinen bir süreyse ona göre başlık
+// döndürür (ChatGPT artık yalnızca haftalık pencere gönderebiliyor).
+func chatgptWindowLabel(seconds int64, fallback string) string {
+	switch seconds {
+	case 604800:
+		return "Haftalık Limit"
+	case 5 * 3600:
+		return "5 Saatlik Limit"
+	}
+	return fallback
 }
 
 // chatgptWindowSubtitle, saniye cinsinden pencere uzunluğunu okunur bir açıklamaya çevirir.

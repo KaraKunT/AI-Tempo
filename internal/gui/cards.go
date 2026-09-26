@@ -13,6 +13,7 @@ import (
 
 	"ai-tempo/internal/config"
 	"ai-tempo/internal/provider"
+	"ai-tempo/internal/usage"
 )
 
 // Renk paleti
@@ -118,6 +119,7 @@ func createAccountTab(account config.Account) *accountTabHandle {
 			errCard := newUsageCard(provider.DisplayName(), account.Name)
 			errCard.setError(info.Error)
 			body.Add(errCard.container)
+			body.Add(newRetryCounterRow(account))
 		default:
 			for _, m := range info.Metrics {
 				c := newUsageCard(m.Label, m.Subtitle)
@@ -143,6 +145,25 @@ func createAccountTab(account config.Account) *accountTabHandle {
 		tabItem: container.NewTabItemWithIcon(account.Name, providerIcon(account.Provider), scrollContent),
 		render:  render,
 	}
+}
+
+// newRetryCounterRow, hatalı hesap için otomatik deneme sayacını ve sayacı
+// sıfırlayıp hemen yeniden deneyen düğmeyi gösterir.
+func newRetryCounterRow(account config.Account) fyne.CanvasObject {
+	n := store.Failures(account.ID)
+	msg := fmt.Sprintf("Deneme: %d/%d", n, usage.MaxAutoRetries)
+	col := colorMuted
+	if n >= usage.MaxAutoRetries {
+		msg += " — otomatik kontrol durduruldu"
+		col = colorDanger
+	}
+	text := canvas.NewText(msg, col)
+	text.TextSize = 12
+	btn := widget.NewButtonWithIcon("Sayacı Sıfırla", theme.ViewRefreshIcon(), func() {
+		store.ResetFailures(account)
+	})
+	btn.Importance = widget.LowImportance
+	return container.NewPadded(container.NewBorder(nil, nil, nil, btn, container.NewCenter(text)))
 }
 
 // newEmptyState, hiç hesap yokken gösterilen karşılama içeriğidir.

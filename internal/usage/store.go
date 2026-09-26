@@ -14,10 +14,12 @@ import (
 // Sorgu politikası: servisleri yormamak (ve engellenmemek) için tüm sorgular
 // tek bir yerden, sırayla ve aralıklı yapılır.
 const (
-	pollTick        = time.Minute      // zamanı gelen hesaplar bu sıklıkla kontrol edilir
-	manualMinGap    = 30 * time.Second // elle yenilemede aynı hesap için en kısa aralık
-	requestSpacing  = 1500 * time.Millisecond
-	maxBackoffShift = 4 // hata sonrası aralık en fazla 2^4 = 16 katına çıkar
+	pollTick       = time.Minute      // zamanı gelen hesaplar bu sıklıkla kontrol edilir
+	manualMinGap   = 30 * time.Second // elle yenilemede aynı hesap için en kısa aralık
+	requestSpacing = 1500 * time.Millisecond
+	// MaxAutoRetries, üst üste bu kadar hatalı sorgudan sonra hesap otomatik
+	// olarak sorgulanmaz; elle yenileme veya sayacı sıfırlama gerekir.
+	MaxAutoRetries = 5
 )
 
 // Store, tüm hesapların son kota sonuçlarını tutar; pencere ve menü çubuğu
@@ -68,6 +70,22 @@ func (u *Store) Status() (loading bool, updated time.Time) {
 	return false, u.updated
 }
 
+// Failures, hesabın üst üste başarısız sorgu sayısını döndürür.
+func (u *Store) Failures(id string) int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.failures[id]
+}
+
+// ResetFailures, hesabın hata sayacını sıfırlar ve hesabı hemen yeniden sorgular.
+func (u *Store) ResetFailures(account config.Account) {
+	u.mu.Lock()
+	u.failures[account.ID] = 0
+	delete(u.fetched, account.ID)
+	u.mu.Unlock()
+	u.Refresh([]config.Account{account}, false)
+}
+
 // Forget, silinen/değiştirilen bir hesabın önbelleğini temizler.
 func (u *Store) Forget(id string) {
 	u.mu.Lock()
@@ -88,7 +106,8 @@ func (u *Store) Start() {
 }
 
 // Refresh, verilen hesapları sırayla sorgular. force=false ise yalnızca
-// zamanı gelenler (yenileme aralığı × hata geri çekilmesi) sorgulanır;
+// zamanı gelenler (yenileme aralığı dolmuş ve hata sayacı MaxAutoRetries'a
+// ulaşmamış olanlar) sorgulanır;
 // force=true ise (elle yenileme) son 30 sn'de sorgulanmamış olanlar sorgulanır.
 func (u *Store) Refresh(accounts []config.Account, force bool) {
 	now := time.Now()
@@ -101,9 +120,11 @@ func (u *Store) Refresh(accounts []config.Account, force bool) {
 			continue
 		}
 		last, seen := u.fetched[a.ID]
-		wait := interval << min(u.failures[a.ID], maxBackoffShift)
+		wait := interval
 		if force {
 			wait = manualMinGap
+		} else if u.failures[a.ID] >= MaxAutoRetries {
+			continue
 		}
 		if seen && now.Sub(last) < wait {
 			continue
