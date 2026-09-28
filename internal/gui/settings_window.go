@@ -238,6 +238,17 @@ func showSettings(app fyne.App, onChanged func()) {
 		}
 	}
 
+	dockCheck := widget.NewCheck(T("Dock'ta göster"), func(on bool) {
+		if config.Current.ShowInDock == on {
+			return
+		}
+		config.Current.ShowInDock = on
+		applyDockVisibility()
+		save()
+		w.RequestFocus()
+	})
+	dockCheck.SetChecked(config.Current.ShowInDock)
+
 	historyOptions := []int{2, 7, 14, 35, 60, 90}
 	historyLabels := make([]string, len(historyOptions))
 	for i, d := range historyOptions {
@@ -260,12 +271,16 @@ func showSettings(app fyne.App, onChanged func()) {
 			widget.NewFormItem(T("Dil"), langSelect),
 			widget.NewFormItem(T("Otomatik yenileme"), refreshSelect),
 			widget.NewFormItem(T("Geçmişi sakla"), historySelect),
+			widget.NewFormItem("", dockCheck),
 		),
 		hintText(T("Her hesap bu aralıkla, sırayla sorgulanır. Üst üste 5 kez hata alan hesap otomatik sorgulanmaz; sayacı hesabın sekmesinden sıfırlayabilirsiniz. Sorgu geçmişi ve grafik verisi seçilen süre kadar saklanır; aylık dönemler için en az 35 gün önerilir.")),
 	))
 
 	accountsHeader := container.NewBorder(nil, nil, sectionTitle(T("Hesaplar")), addBtn)
-	footer := hintText("🔒 " + T("Oturum anahtarları diske yazılmaz, macOS Anahtar Zinciri'nde (Keychain) saklanır."))
+	aboutBtn := widget.NewButtonWithIcon(T("Hakkında"), theme.InfoIcon(), func() { showAbout(w) })
+	aboutBtn.Importance = widget.LowImportance
+	footer := container.NewBorder(nil, nil, nil, aboutBtn,
+		hintText("🔒 "+T("Oturum anahtarları diske yazılmaz, macOS Anahtar Zinciri'nde (Keychain) saklanır.")))
 
 	content := container.NewVBox(
 		general,

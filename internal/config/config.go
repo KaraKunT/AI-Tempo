@@ -36,13 +36,14 @@ type Account struct {
 // (~/Library/Application Support/ai-tempo/settings.json).
 type Settings struct {
 	RefreshMinutes int       `json:"refresh_minutes"`
-	HistoryDays    int       `json:"history_days"`       // sorgu geçmişi ve grafik verisinin saklanma süresi
-	Language       string    `json:"language,omitempty"` // "auto" (boş = auto, sistem dili), "en" veya "tr"
+	HistoryDays    int       `json:"history_days"`           // sorgu geçmişi ve grafik verisinin saklanma süresi
+	ShowInDock     bool      `json:"show_in_dock,omitempty"` // false: yalnızca menü çubuğunda çalışır
+	Language       string    `json:"language,omitempty"`     // "auto" (boş = auto, sistem dili), "en" veya "tr"
 	Accounts       []Account `json:"accounts"`
 }
 
 const (
-	defaultRefreshMinutes = 5
+	defaultRefreshMinutes = 30
 	defaultHistoryDays    = 35 // aylık dönemleri (Cursor) de kapsasın
 )
 

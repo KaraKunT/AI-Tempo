@@ -10,6 +10,10 @@ SIGN_IDENTITY  ?= $(shell security find-identity -v -p codesigning | grep -m1 "D
 NOTARY_PROFILE ?= ai-tempo
 NOTARIZE       ?= 1
 
+# Sürüm: son git etiketinden (v1.2.3 → 1.2.3). Yeni sürümde: make release VERSION=1.2.4
+VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+LDFLAGS := -X ai-tempo/internal/gui.Version=$(VERSION)
+
 .PHONY: help build run clean tidy fmt package release login-add login-remove
 
 ## help: Kullanılabilir komutları listeler (varsayılan hedef)
@@ -19,7 +23,7 @@ help:
 
 ## build: Derler ve ./$(APP_NAME) binary'sini üretir
 build:
-	go build -o $(APP_NAME) ./cmd/ai-tempo
+	go build -ldflags "$(LDFLAGS)" -o $(APP_NAME) ./cmd/ai-tempo
 
 ## run: Derler ve uygulamayı çalıştırır
 run: build
@@ -43,7 +47,7 @@ fmt:
 ## (go install fyne.io/fyne/v2/cmd/fyne@latest).
 package: $(FYNE)
 	rm -rf "$(APP_BUNDLE)"
-	$(FYNE) package -os darwin -name "$(DISPLAY_NAME)" -appID $(APP_ID) -icon "$(CURDIR)/assets/Icon.png" -src ./cmd/ai-tempo
+	$(FYNE) package -os darwin -name "$(DISPLAY_NAME)" -appID $(APP_ID) -appVersion "$(VERSION)" -icon "$(CURDIR)/assets/Icon.png" -src ./cmd/ai-tempo
 	/usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$(APP_BUNDLE)/Contents/Info.plist"
 	codesign --force --deep -s - "$(APP_BUNDLE)"
 	@echo ""
@@ -56,8 +60,8 @@ package: $(FYNE)
 ## bilgileri `xcrun notarytool store-credentials $(NOTARY_PROFILE)` ile bir kez kaydedilir.
 ## NOTARIZE=0 ile yalnızca imzalar (onaysız).
 release: package
-	CGO_ENABLED=1 GOARCH=amd64 go build -o dist/$(APP_NAME)-amd64 ./cmd/ai-tempo
-	CGO_ENABLED=1 GOARCH=arm64 go build -o dist/$(APP_NAME)-arm64 ./cmd/ai-tempo
+	CGO_ENABLED=1 GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/$(APP_NAME)-amd64 ./cmd/ai-tempo
+	CGO_ENABLED=1 GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/$(APP_NAME)-arm64 ./cmd/ai-tempo
 	lipo -create -output "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)" dist/$(APP_NAME)-amd64 dist/$(APP_NAME)-arm64
 	rm -f dist/$(APP_NAME)-amd64 dist/$(APP_NAME)-arm64
 	@test -n "$(SIGN_IDENTITY)" || { echo "❌ Keychain'de 'Developer ID Application' sertifikası yok"; exit 1; }

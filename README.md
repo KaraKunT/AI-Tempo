@@ -26,8 +26,10 @@ otherwise). You can change it in Settings → Language.
 The app is signed with a Developer ID and notarized by Apple, so it opens
 without a security warning.
 
-AI Tempo runs in the menu bar only. It does not appear in the Dock or in
-Cmd+Tab.
+By default AI Tempo runs in the menu bar only and does not appear in the
+Dock or in Cmd+Tab. Turn on **Settings → Show in Dock** if you want it there.
+Opening the app again while it is running brings its window to the front
+instead of starting a second copy.
 
 ## Features
 
@@ -79,8 +81,9 @@ account → Edit**. If you leave the field empty, the existing key is kept.
 
 | Setting | Options |
 |---|---|
+| Show in Dock | Off (default): menu bar only |
 | Language | Automatic (system language, default), English, Türkçe |
-| Auto refresh | 5, 10, 15, 30 minutes · 1, 2, 4, 8, 16, 24 hours |
+| Auto refresh | 5, 10, 15, 30 (default) minutes · 1, 2, 4, 8, 16, 24 hours |
 | Keep history | 2, 7, 14, 35 (default), 60, 90 days. Use at least 35 days to cover monthly periods such as Cursor's |
 
 ### Where data is stored

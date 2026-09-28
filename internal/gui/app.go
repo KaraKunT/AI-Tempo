@@ -43,6 +43,21 @@ var (
 
 // Run, uygulamayı başlatır ve kapanana kadar bloklar.
 func Run() {
+	// Başka bir kopya çalışıyorsa onun penceresini öne getir ve çık.
+	if !claimSingleInstance(func() {
+		fyne.Do(func() {
+			if mainWindow != nil {
+				mainWindow.Show()
+				activateApp()
+				mainWindow.RequestFocus()
+			}
+		})
+	}) {
+		fmt.Println("AI Tempo zaten çalışıyor; mevcut pencere öne getirildi.")
+		return
+	}
+	defer releaseSingleInstance()
+
 	var err error
 	config.Current, err = config.Load()
 	if err != nil {
@@ -112,6 +127,10 @@ func Run() {
 			activateApp()
 			mainWindow.RequestFocus()
 		}, openSettings, func() {
+			mainWindow.Show()
+			activateApp()
+			showAbout(mainWindow)
+		}, func() {
 			saveWindowSize()
 			myApp.Quit()
 		})
@@ -130,7 +149,7 @@ func Run() {
 
 	myApp.Lifecycle().SetOnStarted(func() {
 		fyne.Do(func() {
-			hideFromDock()
+			applyDockVisibility()
 			rememberWindowFrame(mainWindow, "AITempoMainWindow")
 		})
 	})
@@ -270,4 +289,13 @@ func flashStatus(msg string) {
 	statusText.Color = colorWarning
 	statusText.Refresh()
 	time.AfterFunc(3*time.Second, func() { fyne.Do(updateStatus) })
+}
+
+// applyDockVisibility, ayara göre uygulamayı Dock'ta gösterir veya gizler.
+func applyDockVisibility() {
+	if config.Current.ShowInDock {
+		showInDock()
+	} else {
+		hideFromDock()
+	}
 }

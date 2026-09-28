@@ -80,6 +80,15 @@ var en = map[string]string{
 	"Sıfırlama hakkı":            "Resets",
 	"bitiş":                      "expires",
 
+	// Hakkında
+	"Sürüm %s":          "Version %s",
+	"Hakkında":          "About",
+	"AI Tempo Hakkında": "About AI Tempo",
+	"Claude, Cursor ve ChatGPT kullanım limitlerinizi ve temponuzu menü çubuğundan takip edin.": "Track your Claude, Cursor and ChatGPT usage limits and pace from the menu bar.",
+	"MIT lisansı":               "MIT License",
+	"Sürümler ve güncellemeler": "Releases and updates",
+	"Sorun bildir":              "Report an issue",
+
 	// Menü çubuğu
 	"Pencereyi Göster": "Show Window",
 	"hızlı":            "fast",
@@ -93,6 +102,7 @@ var en = map[string]string{
 	"Otomatik (sistem dili)": "Automatic (system language)",
 	"Otomatik yenileme":      "Auto refresh",
 	"Geçmişi sakla":          "Keep history",
+	"Dock'ta göster":         "Show in Dock",
 	"%d gün":                 "%d days",
 	"%d saat":                "%d hours",
 	"%d dakika":              "%d minutes",

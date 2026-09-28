@@ -12,6 +12,10 @@ static void hideFromDock(void) {
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
 }
 
+static void showInDock(void) {
+	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+}
+
 static void activateApp(void) {
 	[NSApp activateIgnoringOtherApps:YES];
 }
@@ -36,6 +40,9 @@ import (
 // LSUIElement tek başına yetmiyor: GLFW açılışta etkinleştirme politikasını
 // "Regular"a çeviriyor, bu yüzden açılıştan sonra tekrar "Accessory" yapılır.
 func hideFromDock() { C.hideFromDock() }
+
+// showInDock, uygulamayı Dock'ta ve Cmd+Tab'da gösterir.
+func showInDock() { C.showInDock() }
 
 // activateApp, Dock'ta olmayan uygulamanın penceresini öne getirir.
 func activateApp() { C.activateApp() }

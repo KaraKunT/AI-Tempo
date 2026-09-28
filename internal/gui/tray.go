@@ -17,11 +17,12 @@ type trayMenu struct {
 	desk       desktop.App
 	onShow     func(tabIndex int)
 	onSettings func()
+	onAbout    func()
 	onQuit     func()
 }
 
-func newTrayMenu(desk desktop.App, onShow func(tabIndex int), onSettings, onQuit func()) *trayMenu {
-	t := &trayMenu{desk: desk, onShow: onShow, onSettings: onSettings, onQuit: onQuit}
+func newTrayMenu(desk desktop.App, onShow func(tabIndex int), onSettings, onAbout, onQuit func()) *trayMenu {
+	t := &trayMenu{desk: desk, onShow: onShow, onSettings: onSettings, onAbout: onAbout, onQuit: onQuit}
 	desk.SetSystemTrayIcon(trayIcon)
 	t.rebuild()
 	onStoreChange(t.rebuild)
@@ -89,6 +90,7 @@ func (t *trayMenu) rebuild() {
 		refreshItem,
 		fyne.NewMenuItem(T("Pencereyi Göster"), func() { t.onShow(-1) }),
 		fyne.NewMenuItem(T("Ayarlar…"), t.onSettings),
+		fyne.NewMenuItem(T("AI Tempo Hakkında"), t.onAbout),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem(T("Çıkış"), t.onQuit),
 	)

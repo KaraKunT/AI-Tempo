@@ -28,7 +28,10 @@ Ayarlar → Dil bölümünden değiştirebilirsiniz.
 Uygulama Developer ID ile imzalı ve Apple tarafından onaylı (notarize
 edilmiş). Güvenlik uyarısı olmadan açılır.
 
-AI Tempo yalnızca menü çubuğunda çalışır. Dock'ta ve Cmd+Tab'da görünmez.
+AI Tempo varsayılan olarak yalnızca menü çubuğunda çalışır, Dock'ta ve
+Cmd+Tab'da görünmez. Dock'ta görmek isterseniz **Ayarlar → Dock'ta göster**
+seçeneğini açın. Uygulama çalışırken tekrar açılırsa ikinci bir kopya
+başlamaz, mevcut pencere öne gelir.
 
 ## Özellikler
 
@@ -83,8 +86,9 @@ mevcut anahtar korunur.
 
 | Ayar | Seçenekler |
 |---|---|
+| Dock'ta göster | Kapalı (varsayılan): yalnızca menü çubuğu |
 | Dil | Otomatik (sistem dili, varsayılan), English, Türkçe |
-| Otomatik yenileme | 5, 10, 15, 30 dakika · 1, 2, 4, 8, 16, 24 saat |
+| Otomatik yenileme | 5, 10, 15, 30 (varsayılan) dakika · 1, 2, 4, 8, 16, 24 saat |
 | Geçmişi sakla | 2, 7, 14, 35 (varsayılan), 60, 90 gün. Cursor gibi aylık dönemler için en az 35 gün seçin |
 
 ### Veriler nerede saklanır?
