@@ -38,7 +38,8 @@ func severityColor(percent float64) color.Color {
 
 // buildMainLayout, ana pencerenin header + tab yapısını oluşturur.
 // onRefreshCurrent yalnızca o an seçili sekmeyi, onRefreshAll ise tüm sekmeleri yeniler.
-func buildMainLayout(body fyne.CanvasObject, onRefreshCurrent, onRefreshAll, onSettings func()) fyne.CanvasObject {
+// status, başlığın altında gösterilen yenileme durum satırıdır.
+func buildMainLayout(body, status fyne.CanvasObject, onRefreshCurrent, onRefreshAll, onSettings func()) fyne.CanvasObject {
 	logo := canvas.NewImageFromResource(appIcon)
 	logo.FillMode = canvas.ImageFillContain
 	logo.SetMinSize(fyne.NewSquareSize(40))
@@ -73,7 +74,7 @@ func buildMainLayout(body fyne.CanvasObject, onRefreshCurrent, onRefreshAll, onS
 	headerPadded := container.NewPadded(container.NewPadded(header))
 
 	return container.NewBorder(
-		headerPadded,
+		container.NewVBox(headerPadded, status),
 		nil, nil, nil,
 		container.NewPadded(body),
 	)
@@ -131,10 +132,8 @@ func createAccountTab(account config.Account) *accountTabHandle {
 			}
 		}
 		if loading && info != nil {
-			hint := canvas.NewText("Yenileniyor…", colorMuted)
-			hint.TextSize = 11
-			hint.Alignment = fyne.TextAlignCenter
-			body.Add(hint)
+			bar := widget.NewProgressBarInfinite()
+			body.Objects = append([]fyne.CanvasObject{container.NewPadded(bar)}, body.Objects...)
 		}
 		body.Refresh()
 	}

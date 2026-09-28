@@ -109,7 +109,8 @@ func (u *Store) Start() {
 // zamanı gelenler (yenileme aralığı dolmuş ve hata sayacı MaxAutoRetries'a
 // ulaşmamış olanlar) sorgulanır;
 // force=true ise (elle yenileme) son 30 sn'de sorgulanmamış olanlar sorgulanır.
-func (u *Store) Refresh(accounts []config.Account, force bool) {
+// Sorguya alınan hesap sayısını döndürür.
+func (u *Store) Refresh(accounts []config.Account, force bool) int {
 	now := time.Now()
 	interval := time.Duration(config.Current.RefreshMinutes) * time.Minute
 
@@ -123,6 +124,9 @@ func (u *Store) Refresh(accounts []config.Account, force bool) {
 		wait := interval
 		if force {
 			wait = manualMinGap
+			if r := u.results[a.ID]; r != nil && !r.Success {
+				wait = 0 // hatalı hesap elle hemen yeniden denenebilir
+			}
 		} else if u.failures[a.ID] >= MaxAutoRetries {
 			continue
 		}
@@ -134,7 +138,7 @@ func (u *Store) Refresh(accounts []config.Account, force bool) {
 	}
 	u.mu.Unlock()
 	if len(due) == 0 {
-		return
+		return 0
 	}
 	u.Notify()
 
@@ -161,4 +165,5 @@ func (u *Store) Refresh(accounts []config.Account, force bool) {
 			u.Notify()
 		}
 	}()
+	return len(due)
 }

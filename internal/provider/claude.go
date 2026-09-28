@@ -40,34 +40,49 @@ func (claudeProvider) Query(ctx context.Context, account config.Account) RateLim
 
 	url := fmt.Sprintf("https://claude.ai/api/organizations/%s/usage", account.OrganizationID)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		info.Error = "İstek hatası"
-		return info
-	}
+	// Cloudflare engeli genelde geçicidir; yeni bir bağlantıyla birkaç saniye
+	// sonra bir kez daha denenir.
+	var resp *http.Response
+	var body []byte
+	for attempt := 0; ; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			info.Error = "İstek hatası"
+			return info
+		}
+		req.AddCookie(&http.Cookie{Name: "sessionKeyV3", Value: account.SessionKey})
+		req.Header.Set("User-Agent", browserUserAgent)
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Accept-Language", "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7")
+		req.Header.Set("Referer", "https://claude.ai/settings/usage")
+		req.Header.Set("anthropic-client-platform", "web_claude_ai")
 
-	req.AddCookie(&http.Cookie{
-		Name:  "sessionKeyV3",
-		Value: account.SessionKey,
-	})
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15)")
-	req.Header.Set("Accept", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		info.Error = "API bağlantı hatası"
-		return info
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		info.Error = "Yanıt hatası"
-		return info
+		resp, err = httpClient.Do(req)
+		if err != nil {
+			info.Error = "API bağlantı hatası"
+			return info
+		}
+		body, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			info.Error = "Yanıt hatası"
+			return info
+		}
+		if attempt > 0 || resp.StatusCode == http.StatusOK || !isCloudflareBlock(resp, body) {
+			break
+		}
+		select {
+		case <-time.After(3 * time.Second):
+		case <-ctx.Done():
+			info.Error = "API bağlantı hatası"
+			return info
+		}
 	}
 
 	switch {
+	case resp.StatusCode != http.StatusOK && isCloudflareBlock(resp, body):
+		info.Error = fmt.Sprintf("Cloudflare engeli (HTTP %d), tekrar denenecek", resp.StatusCode)
+		return info
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
 		info.Error = fmt.Sprintf("Session süresi dolmuş (HTTP %d)", resp.StatusCode)
 		return info

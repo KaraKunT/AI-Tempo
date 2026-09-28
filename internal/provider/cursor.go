@@ -55,8 +55,7 @@ func (cursorProvider) Query(ctx context.Context, account config.Account) RateLim
 	req.Header.Set("Origin", "https://cursor.com")
 	req.Header.Set("Referer", "https://cursor.com/dashboard/spending")
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		info.Error = "API bağlantı hatası"
 		return info

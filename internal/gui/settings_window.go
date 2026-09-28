@@ -15,7 +15,7 @@ import (
 	"ai-tempo/internal/provider"
 )
 
-var refreshOptions = []int{5, 10, 15, 30, 60}
+var refreshOptions = []int{5, 10, 15, 30, 60, 120, 240, 480, 960, 1440}
 
 // providerHelp, hesap düzenleyicide anahtarın nereden alınacağını kısaca anlatır
 // (ayrıntılı adımlar README'de).
@@ -192,7 +192,7 @@ func showSettings(app fyne.App, onChanged func()) {
 
 	labels := make([]string, len(refreshOptions))
 	for i, m := range refreshOptions {
-		labels[i] = fmt.Sprintf("%d dakika", m)
+		labels[i] = refreshLabel(m)
 	}
 	refreshSelect := widget.NewSelect(labels, func(sel string) {
 		for i, l := range labels {
@@ -202,7 +202,7 @@ func showSettings(app fyne.App, onChanged func()) {
 			}
 		}
 	})
-	refreshSelect.SetSelected(fmt.Sprintf("%d dakika", config.Current.RefreshMinutes))
+	refreshSelect.SetSelected(refreshLabel(config.Current.RefreshMinutes))
 
 	general := newRoundedCard(container.NewVBox(
 		sectionTitle("Genel"),
@@ -342,6 +342,14 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 	}, parent)
 	d.Resize(fyne.NewSize(520, 420))
 	d.Show()
+}
+
+// refreshLabel, yenileme aralığını okunur hale getirir (60 ve katları saat olarak).
+func refreshLabel(minutes int) string {
+	if minutes >= 60 && minutes%60 == 0 {
+		return fmt.Sprintf("%d saat", minutes/60)
+	}
+	return fmt.Sprintf("%d dakika", minutes)
 }
 
 func sectionTitle(text string) fyne.CanvasObject {

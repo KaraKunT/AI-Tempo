@@ -56,8 +56,7 @@ func (chatgptProvider) Query(ctx context.Context, account config.Account) RateLi
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15)")
 	req.Header.Set("Accept", "*/*")
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		info.Error = "API bağlantı hatası"
 		return info
@@ -136,7 +135,7 @@ func chatgptGet(ctx context.Context, account config.Account, path string) ([]byt
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15)")
 	req.Header.Set("Accept", "*/*")
 
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

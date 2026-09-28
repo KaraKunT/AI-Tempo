@@ -4,6 +4,8 @@ package provider
 
 import (
 	"context"
+	"net/http"
+	"strings"
 	"time"
 
 	"ai-tempo/internal/config"
@@ -97,4 +99,36 @@ func CalcPace(percent, timeProgress float64) Pace {
 	default:
 		return PaceNormal
 	}
+}
+
+// baseTransport, bağlantıları yeniden kullanır (Cloudflare yerleşik bağlantılara
+// daha az şüpheyle bakar).
+var baseTransport = http.DefaultTransport.(*http.Transport).Clone()
+
+// resettingTransport, başarısız bir yanıttan sonra boştaki bağlantıları kapatır;
+// böylece uyku/ağ değişikliği sonrası "bozulmuş" bir bağlantı yeniden kullanılmaz
+// (eskiden bu durum ancak uygulama yeniden başlatılınca düzeliyordu).
+type resettingTransport struct{}
+
+func (resettingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := baseTransport.RoundTrip(req)
+	if err != nil || resp.StatusCode >= 400 {
+		baseTransport.CloseIdleConnections()
+	}
+	return resp, err
+}
+
+// httpClient, tüm sağlayıcıların ortak HTTP istemcisidir.
+var httpClient = &http.Client{Timeout: 10 * time.Second, Transport: resettingTransport{}}
+
+// browserUserAgent, isteklerin gerçek bir tarayıcıdan gelmiş gibi görünmesi için kullanılır.
+const browserUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+
+// isCloudflareBlock, yanıtın oturum hatası değil Cloudflare engeli olup olmadığını tahmin eder.
+func isCloudflareBlock(resp *http.Response, body []byte) bool {
+	if resp.Header.Get("cf-mitigated") != "" {
+		return true
+	}
+	b := string(body)
+	return strings.Contains(b, "Just a moment") || strings.Contains(b, "challenge-platform")
 }

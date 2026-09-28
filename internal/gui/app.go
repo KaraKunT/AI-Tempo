@@ -5,12 +5,15 @@ package gui
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/widget"
 
 	"ai-tempo/internal/config"
 	"ai-tempo/internal/usage"
@@ -75,7 +78,9 @@ func Run() {
 		}
 	})
 
-	mainWindow.SetContent(buildMainLayout(mainBody, refreshCurrentTab, refreshAllTabs, openSettings))
+	onStoreChange(updateStatus)
+	updateStatus()
+	mainWindow.SetContent(buildMainLayout(mainBody, newStatusBar(), refreshCurrentTab, refreshAllTabs, openSettings))
 
 	saveWindowSize := func() {
 		size := mainWindow.Canvas().Size()
@@ -165,7 +170,9 @@ func refreshCurrentTab() {
 	sel := tabContainer.Selected()
 	for _, h := range accountTabs {
 		if h.tabItem == sel {
-			store.Refresh([]config.Account{h.account}, true)
+			if store.Refresh([]config.Account{h.account}, true) == 0 {
+				flashStatus("“" + h.account.Name + "” az önce güncellendi (30 sn içinde tekrar sorgulanmaz)")
+			}
 			return
 		}
 	}
@@ -173,5 +180,57 @@ func refreshCurrentTab() {
 
 // refreshAllTabs, tüm etkin hesapları yeniden sorgular.
 func refreshAllTabs() {
-	store.Refresh(config.EnabledAccounts(), true)
+	if store.Refresh(config.EnabledAccounts(), true) == 0 {
+		flashStatus("Tüm hesaplar az önce güncellendi (30 sn içinde tekrar sorgulanmaz)")
+	}
+}
+
+var (
+	statusText    *canvas.Text
+	statusSpinner *widget.Activity
+	flashUntil    time.Time
+)
+
+// newStatusBar, başlığın altındaki "Yenileniyor… / Son güncelleme" satırını oluşturur.
+func newStatusBar() fyne.CanvasObject {
+	return container.NewCenter(container.NewHBox(statusSpinner, statusText))
+}
+
+// updateStatus, durum satırını store'un yükleniyor/son güncelleme bilgisine göre yeniler.
+func updateStatus() {
+	if statusText == nil {
+		statusText = canvas.NewText("", colorMuted)
+		statusText.TextSize = 12
+		statusSpinner = widget.NewActivity()
+	}
+	loading, updated := store.Status()
+	switch {
+	case loading:
+		statusText.Text = "Yenileniyor…"
+		statusText.Color = colorAccent
+		statusSpinner.Show()
+		statusSpinner.Start()
+	default:
+		statusSpinner.Stop()
+		statusSpinner.Hide()
+		if time.Now().Before(flashUntil) {
+			return
+		}
+		statusText.Color = colorMuted
+		if updated.IsZero() {
+			statusText.Text = ""
+		} else {
+			statusText.Text = "✓ Son güncelleme: " + updated.Format("15:04:05")
+		}
+	}
+	statusText.Refresh()
+}
+
+// flashStatus, durum satırında birkaç saniyeliğine bir bilgi mesajı gösterir.
+func flashStatus(msg string) {
+	flashUntil = time.Now().Add(3 * time.Second)
+	statusText.Text = "ℹ " + msg
+	statusText.Color = colorWarning
+	statusText.Refresh()
+	time.AfterFunc(3*time.Second, func() { fyne.Do(updateStatus) })
 }
