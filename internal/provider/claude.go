@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -40,15 +39,10 @@ func (claudeProvider) Query(ctx context.Context, account config.Account) RateLim
 
 	url := fmt.Sprintf("https://claude.ai/api/organizations/%s/usage", account.OrganizationID)
 
-	// Cloudflare engeli genelde geçicidir; yeni bir bağlantıyla birkaç saniye
-	// sonra bir kez daha denenir.
-	var resp *http.Response
-	var body []byte
-	for attempt := 0; ; attempt++ {
+	resp, body, ok := fetch(ctx, &info, func() (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
-			info.Error = T("İstek hatası")
-			return info
+			return nil, err
 		}
 		req.AddCookie(&http.Cookie{Name: "sessionKeyV3", Value: account.SessionKey})
 		req.Header.Set("User-Agent", browserUserAgent)
@@ -56,38 +50,9 @@ func (claudeProvider) Query(ctx context.Context, account config.Account) RateLim
 		req.Header.Set("Accept-Language", "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7")
 		req.Header.Set("Referer", "https://claude.ai/settings/usage")
 		req.Header.Set("anthropic-client-platform", "web_claude_ai")
-
-		resp, err = httpClient.Do(req)
-		if err != nil {
-			info.Error = T("API bağlantı hatası")
-			return info
-		}
-		body, err = io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			info.Error = T("Yanıt hatası")
-			return info
-		}
-		if attempt > 0 || resp.StatusCode == http.StatusOK || !isCloudflareBlock(resp, body) {
-			break
-		}
-		select {
-		case <-time.After(3 * time.Second):
-		case <-ctx.Done():
-			info.Error = T("API bağlantı hatası")
-			return info
-		}
-	}
-
-	switch {
-	case resp.StatusCode != http.StatusOK && isCloudflareBlock(resp, body):
-		info.Error = Tf("Cloudflare engeli (HTTP %d), tekrar denenecek", resp.StatusCode)
-		return info
-	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		info.Error = Tf("Session süresi dolmuş (HTTP %d)", resp.StatusCode)
-		return info
-	case resp.StatusCode != http.StatusOK:
-		info.Error = Tf("Sunucu hatası (HTTP %d)", resp.StatusCode)
+		return req, nil
+	})
+	if !ok || !checkStatus(&info, resp, body, T("Session süresi dolmuş"), false) {
 		return info
 	}
 

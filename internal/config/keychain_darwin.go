@@ -1,3 +1,5 @@
+//go:build darwin
+
 package config
 
 import (
@@ -18,6 +20,8 @@ func keychainGetFor(service, id string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-func KeychainDelete(id string) {
-	_ = exec.Command("security", "delete-generic-password", "-s", appID, "-a", id).Run()
+func KeychainDelete(id string) { keychainDeleteFor(appID, id) }
+
+func keychainDeleteFor(service, id string) {
+	_ = exec.Command("security", "delete-generic-password", "-s", service, "-a", id).Run()
 }

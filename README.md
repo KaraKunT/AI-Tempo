@@ -2,7 +2,7 @@
 
 **English** · [Türkçe](README.tr.md)
 
-A macOS menu bar app that tracks the usage limits of your **Claude.ai**,
+A macOS menu bar app (with a Windows version) that tracks the usage limits of your **Claude.ai**,
 **Cursor** and **ChatGPT** accounts in one place. Each account gets its own
 tab. Each quota card shows **usage percentage**, **time until reset** and
 **pace**: whether you are on track to run out before the period ends.
@@ -25,6 +25,11 @@ otherwise). You can change it in Settings → Language.
 
 The app is signed with a Developer ID and notarized by Apple, so it opens
 without a security warning.
+
+**Windows:** download **`AI-Tempo-Windows.zip`** from the same release,
+unzip it anywhere and run **AI Tempo.exe**. It lives in the system tray next
+to the clock. The exe is not code-signed yet, so Windows SmartScreen may show
+"Windows protected your PC" the first time: click **More info → Run anyway**.
 
 By default AI Tempo runs in the menu bar only and does not appear in the
 Dock or in Cmd+Tab. Turn on **Settings → Show in Dock** if you want it there.
@@ -82,6 +87,7 @@ account → Edit**. If you leave the field empty, the existing key is kept.
 | Setting | Options |
 |---|---|
 | Show in Dock | Off (default): menu bar only |
+| Launch at login | Off (default). Needs the app in the Applications folder, macOS 13+ |
 | Language | Automatic (system language, default), English, Türkçe |
 | Auto refresh | 5, 10, 15, 30 (default) minutes · 1, 2, 4, 8, 16, 24 hours |
 | Keep history | 2, 7, 14, 35 (default), 60, 90 days. Use at least 35 days to cover monthly periods such as Cursor's |
@@ -91,8 +97,10 @@ account → Edit**. If you leave the field empty, the existing key is kept.
 | What | Where |
 |---|---|
 | Accounts, IDs, settings | `~/Library/Application Support/ai-tempo/settings.json` |
-| Session keys / tokens | macOS **Keychain**, service `ai-tempo`. Never written to disk in plain text |
+| Session keys / tokens | macOS **Keychain**, service `ai-tempo` · Windows **Credential Manager** (`ai-tempo/…`). Never written to disk in plain text |
 | Query history and chart data | `~/Library/Application Support/ai-tempo/history.db` (SQLite) |
+
+On Windows the files live in `%AppData%\ai-tempo\` instead.
 
 Everything stays on your Mac. AI Tempo only talks to claude.ai, cursor.com
 and chatgpt.com.
@@ -120,13 +128,7 @@ make run       # build and run from the terminal
 make package   # build "AI Tempo.app"
 make release   # universal (Intel + Apple Silicon), signed + notarized → dist/AI-Tempo-macOS.zip
 make release NOTARIZE=0   # sign only (needs a Developer ID certificate)
-```
-
-Start at login:
-
-```bash
-make login-add      # adds the .app in this folder to login items
-make login-remove
+make release-windows      # Windows exe → dist/AI-Tempo-Windows.zip (needs: brew install mingw-w64)
 ```
 
 ## Project layout

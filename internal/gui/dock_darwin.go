@@ -4,9 +4,30 @@ package gui
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa
+#cgo LDFLAGS: -framework Cocoa -framework ServiceManagement
 #import <Cocoa/Cocoa.h>
+#import <ServiceManagement/ServiceManagement.h>
 #include <stdlib.h>
+
+// loginItemStatus: 0 kayıtlı değil, 1 etkin, 2 kullanıcı onayı gerekiyor,
+// 3 bulunamadı (.app dışında çalışıyor), -1 desteklenmiyor (macOS < 13).
+static int loginItemStatus(void) {
+	if (@available(macOS 13.0, *)) {
+		return (int)[SMAppService mainAppService].status;
+	}
+	return -1;
+}
+
+// setLoginItem, uygulamayı oturum açılış öğesi olarak kaydeder/kaldırır; 0 başarı.
+static int setLoginItem(int on) {
+	if (@available(macOS 13.0, *)) {
+		NSError *err = nil;
+		BOOL ok = on ? [[SMAppService mainAppService] registerAndReturnError:&err]
+		             : [[SMAppService mainAppService] unregisterAndReturnError:&err];
+		return ok ? 0 : (int)(err ? err.code : 1);
+	}
+	return -1;
+}
 
 static void hideFromDock(void) {
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
@@ -64,4 +85,26 @@ func rememberWindowFrame(w fyne.Window, name string) {
 		defer C.free(unsafe.Pointer(cname))
 		C.autosaveFrame(C.uintptr_t(mac.NSWindow), cname)
 	})
+}
+
+// Oturum açılış öğesi durumları (SMAppServiceStatus).
+const (
+	loginNotRegistered   = 0
+	loginEnabled         = 1
+	loginRequiresApprove = 2
+	loginNotFound        = 3
+	loginUnsupported     = -1
+)
+
+// loginItemState, uygulamanın oturum açılışında başlatılma durumunu döndürür.
+func loginItemState() int { return int(C.loginItemStatus()) }
+
+// setLaunchAtLogin, uygulamayı oturum açılışında başlatılacak şekilde kaydeder
+// veya kaydını siler (macOS 13+, SMAppService). Hata olursa false döner.
+func setLaunchAtLogin(on bool) bool {
+	v := C.int(0)
+	if on {
+		v = 1
+	}
+	return C.setLoginItem(v) == 0
 }

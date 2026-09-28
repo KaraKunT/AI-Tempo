@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"time"
@@ -43,38 +42,12 @@ func (chatgptProvider) Query(ctx context.Context, account config.Account) RateLi
 
 	url := "https://chatgpt.com/backend-api/wham/usage"
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		info.Error = T("İstek hatası")
-		return info
-	}
-
-	req.Header.Set("Authorization", "Bearer "+account.SessionKey)
-	if account.OrganizationID != "" {
-		req.Header.Set("chatgpt-account-id", account.OrganizationID)
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15)")
-	req.Header.Set("Accept", "*/*")
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		info.Error = T("API bağlantı hatası")
-		return info
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		info.Error = T("Yanıt hatası")
-		return info
-	}
-
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		info.Error = T("Token süresi dolmuş")
-		return info
-	}
-	if resp.StatusCode != http.StatusOK {
-		info.Error = Tf("API hatası (HTTP %d)", resp.StatusCode)
+	resp, body, ok := fetch(ctx, &info, func() (*http.Request, error) {
+		return newChatGPTRequest(ctx, account, url)
+	})
+	// Token bir JWT: süresi dolmadıysa 401/403 geçici bir engeldir, "süresi dolmuş" değil.
+	keyValid := time.Now().Before(jwtExpiry(account.SessionKey))
+	if !ok || !checkStatus(&info, resp, body, T("Token süresi dolmuş"), keyValid) {
 		return info
 	}
 
@@ -128,9 +101,9 @@ func (chatgptProvider) Query(ctx context.Context, account config.Account) RateLi
 	return info
 }
 
-// chatgptGet, ChatGPT backend-api'sine hesabın token'ıyla GET isteği atar.
-func chatgptGet(ctx context.Context, account config.Account, path string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://chatgpt.com/backend-api"+path, nil)
+// newChatGPTRequest, ChatGPT backend-api'si için hesabın token'ıyla GET isteği oluşturur.
+func newChatGPTRequest(ctx context.Context, account config.Account, url string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -138,18 +111,26 @@ func chatgptGet(ctx context.Context, account config.Account, path string) ([]byt
 	if account.OrganizationID != "" {
 		req.Header.Set("chatgpt-account-id", account.OrganizationID)
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15)")
+	req.Header.Set("User-Agent", browserUserAgent)
 	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Referer", "https://chatgpt.com/codex")
+	req.Header.Set("OAI-Language", "tr-TR")
+	return req, nil
+}
 
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, err
+// chatgptGet, ChatGPT backend-api'sine hesabın token'ıyla GET isteği atar.
+func chatgptGet(ctx context.Context, account config.Account, path string) ([]byte, error) {
+	var info RateLimitInfo
+	resp, body, ok := fetch(ctx, &info, func() (*http.Request, error) {
+		return newChatGPTRequest(ctx, account, "https://chatgpt.com/backend-api"+path)
+	})
+	if !ok {
+		return nil, fmt.Errorf("%s", info.Error)
 	}
-	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	return io.ReadAll(resp.Body)
+	return body, nil
 }
 
 // fetchChatGPTResetCredits, kullanılabilir Codex limit sıfırlama haklarını sorgular.

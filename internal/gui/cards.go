@@ -143,7 +143,7 @@ func createAccountTab(account config.Account) *accountTabHandle {
 			errCard := newUsageCard(prov.DisplayName(), account.Name)
 			errCard.setError(info.Error)
 			body.Add(errCard.container)
-			body.Add(newRetryCounterRow(account))
+			body.Add(newRetryCounterRow(account, info.AuthExpired))
 		default:
 			for _, m := range info.Metrics {
 				c := newUsageCard(m.Label, m.Subtitle)
@@ -181,7 +181,8 @@ func createAccountTab(account config.Account) *accountTabHandle {
 
 // newRetryCounterRow, hatalı hesap için otomatik deneme sayacını ve sayacı
 // sıfırlayıp hemen yeniden deneyen düğmeyi gösterir.
-func newRetryCounterRow(account config.Account) fyne.CanvasObject {
+// authExpired ise yanına hesabın düzenleme penceresini açan "Anahtarı Güncelle" eklenir.
+func newRetryCounterRow(account config.Account, authExpired bool) fyne.CanvasObject {
 	n := store.Failures(account.ID)
 	msg := Tf("Deneme: %d/%d", n, usage.MaxAutoRetries)
 	col := colorMuted
@@ -195,7 +196,15 @@ func newRetryCounterRow(account config.Account) fyne.CanvasObject {
 		store.ResetFailures(account)
 	})
 	btn.Importance = widget.LowImportance
-	return container.NewPadded(container.NewBorder(nil, nil, nil, btn, container.NewCenter(text)))
+	buttons := container.NewHBox(btn)
+	if authExpired {
+		update := widget.NewButtonWithIcon(T("Anahtarı Güncelle"), theme.DocumentCreateIcon(), func() {
+			editAccountFromMain(account.ID)
+		})
+		update.Importance = widget.HighImportance
+		buttons.Objects = []fyne.CanvasObject{update, btn}
+	}
+	return container.NewPadded(container.NewBorder(nil, nil, nil, buttons, container.NewCenter(text)))
 }
 
 // tabTitle, sekme başlığına hesabın durumunu ekler; "Tümünü Yenile"de hangi

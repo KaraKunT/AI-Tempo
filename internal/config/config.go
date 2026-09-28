@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 )
 
@@ -95,7 +94,7 @@ func migrateFromOldName() error {
 	}
 	// Yeni yere yazıldıktan sonra eski kayıtlar temizlenir.
 	for _, a := range old.Accounts {
-		_ = exec.Command("security", "delete-generic-password", "-s", oldAppID, "-a", a.ID).Run()
+		keychainDeleteFor(oldAppID, a.ID)
 	}
 	return os.RemoveAll(filepath.Dir(oldPath))
 }

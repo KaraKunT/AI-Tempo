@@ -1,8 +1,12 @@
 package gui
 
 import (
+	"context"
 	"fmt"
+	"image/color"
+	"runtime"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -82,7 +86,53 @@ func showConsoleSnippet(parent fyne.Window, providerID string) {
 	d.Show()
 }
 
-var settingsWindow fyne.Window
+var (
+	settingsWindow  fyne.Window
+	settingsRebuild func() // Ayarlar açıkken hesap listesini yeniler
+)
+
+// applyAccountEdit, düzenlenen hesabı (ve girildiyse yeni anahtarı) kaydedilmek
+// üzere uygular; ayar dosyasını yazmaz. Keychain hatasında false döner.
+func applyAccountEdit(parent fyne.Window, updated config.Account, newKey string) bool {
+	if newKey != "" {
+		if err := config.KeychainSet(updated.ID, newKey); err != nil {
+			dialog.ShowError(fmt.Errorf("%s: %w", T("Anahtar Keychain'e kaydedilemedi"), err), parent)
+			return false
+		}
+		updated.SessionKey = newKey
+	}
+	for i := range config.Current.Accounts {
+		if config.Current.Accounts[i].ID == updated.ID {
+			config.Current.Accounts[i] = updated
+		}
+	}
+	store.Forget(updated.ID)
+	return true
+}
+
+// editAccountFromMain, ana penceredeki "Anahtarı Güncelle" düğmesi için hesabın
+// düzenleme penceresini açar; kaydedilince hesap hemen yeniden sorgulanır.
+func editAccountFromMain(accountID string) {
+	for i := range config.Current.Accounts {
+		if config.Current.Accounts[i].ID != accountID {
+			continue
+		}
+		showAccountEditor(mainWindow, &config.Current.Accounts[i], func(updated config.Account, newKey string) {
+			if !applyAccountEdit(mainWindow, updated, newKey) {
+				return
+			}
+			if err := config.Current.Save(); err != nil {
+				dialog.ShowError(fmt.Errorf("%s: %w", T("Ayarlar kaydedilemedi"), err), mainWindow)
+				return
+			}
+			if settingsRebuild != nil {
+				settingsRebuild()
+			}
+			accountsChanged()
+		})
+		return
+	}
+}
 
 // showSettings, ayarlar penceresini açar (zaten açıksa öne getirir).
 // onChanged, hesaplar veya ayarlar değiştiğinde çağrılır.
@@ -95,8 +145,11 @@ func showSettings(app fyne.App, onChanged func()) {
 	}
 	w := app.NewWindow(T("Ayarlar"))
 	settingsWindow = w
-	w.SetOnClosed(func() { settingsWindow = nil })
-	w.Resize(fyne.NewSize(560, 560))
+	w.SetOnClosed(func() {
+		settingsWindow = nil
+		settingsRebuild = nil
+	})
+	w.Resize(fyne.NewSize(760, 720))
 
 	accountList := container.NewVBox()
 	var rebuild func()
@@ -141,16 +194,9 @@ func showSettings(app fyne.App, onChanged func()) {
 
 			edit := widget.NewButtonWithIcon("", theme.DocumentCreateIcon(), func() {
 				showAccountEditor(w, &config.Current.Accounts[idx], func(updated config.Account, newKey string) {
-					if newKey != "" {
-						if err := config.KeychainSet(updated.ID, newKey); err != nil {
-							dialog.ShowError(fmt.Errorf("%s: %w", T("Anahtar Keychain'e kaydedilemedi"), err), w)
-							return
-						}
-						updated.SessionKey = newKey
+					if applyAccountEdit(w, updated, newKey) {
+						save()
 					}
-					config.Current.Accounts[idx] = updated
-					store.Forget(updated.ID)
-					save()
 				})
 			})
 			edit.Importance = widget.LowImportance
@@ -178,6 +224,7 @@ func showSettings(app fyne.App, onChanged func()) {
 		accountList.Refresh()
 	}
 	rebuild()
+	settingsRebuild = rebuild
 
 	addBtn := widget.NewButtonWithIcon(T("Hesap Ekle"), theme.ContentAddIcon(), func() {
 		showAccountEditor(w, nil, func(acc config.Account, newKey string) {
@@ -248,6 +295,43 @@ func showSettings(app fyne.App, onChanged func()) {
 		w.RequestFocus()
 	})
 	dockCheck.SetChecked(config.Current.ShowInDock)
+	if runtime.GOOS != "darwin" {
+		dockCheck.Hide() // Dock yalnızca macOS'ta var
+	}
+
+	// Oturum açılışında başlatma: durum ayar dosyasında değil, macOS'ta tutulur.
+	loginHint := hintText("")
+	loginHint.Hide()
+	var loginCheck *widget.Check
+	var refreshLoginState func()
+	refreshLoginState = func() {
+		st := loginItemState()
+		loginCheck.OnChanged = nil
+		loginCheck.SetChecked(st == loginEnabled || st == loginRequiresApprove)
+		loginCheck.OnChanged = func(on bool) {
+			if !setLaunchAtLogin(on) {
+				dialog.ShowInformation(T("Oturum açılışında başlat"), T("Ayar değiştirilemedi. Uygulamayı Uygulamalar klasörüne taşıyıp tekrar deneyin."), w)
+			}
+			refreshLoginState()
+		}
+		switch st {
+		case loginRequiresApprove:
+			loginHint.SetText(T("macOS onay bekliyor: Sistem Ayarları → Genel → Giriş Öğeleri'nden AI Tempo'ya izin verin."))
+			loginHint.Show()
+		case loginNotFound, loginUnsupported:
+			loginCheck.Disable()
+			if runtime.GOOS == "darwin" {
+				loginHint.SetText(T("Bu seçenek yalnızca Uygulamalar klasöründeki AI Tempo.app için kullanılabilir (macOS 13+)."))
+			} else {
+				loginHint.SetText(T("Bu sistemde kullanılamıyor."))
+			}
+			loginHint.Show()
+		default:
+			loginHint.Hide()
+		}
+	}
+	loginCheck = widget.NewCheck(T("Oturum açılışında başlat"), nil)
+	refreshLoginState()
 
 	historyOptions := []int{2, 7, 14, 35, 60, 90}
 	historyLabels := make([]string, len(historyOptions))
@@ -272,6 +356,7 @@ func showSettings(app fyne.App, onChanged func()) {
 			widget.NewFormItem(T("Otomatik yenileme"), refreshSelect),
 			widget.NewFormItem(T("Geçmişi sakla"), historySelect),
 			widget.NewFormItem("", dockCheck),
+			widget.NewFormItem("", container.NewVBox(loginCheck, loginHint)),
 		),
 		hintText(T("Her hesap bu aralıkla, sırayla sorgulanır. Üst üste 5 kez hata alan hesap otomatik sorgulanmaz; sayacı hesabın sekmesinden sıfırlayabilirsiniz. Sorgu geçmişi ve grafik verisi seçilen süre kadar saklanır; aylık dönemler için en az 35 gün önerilir.")),
 	))
@@ -280,7 +365,7 @@ func showSettings(app fyne.App, onChanged func()) {
 	aboutBtn := widget.NewButtonWithIcon(T("Hakkında"), theme.InfoIcon(), func() { showAbout(w) })
 	aboutBtn.Importance = widget.LowImportance
 	footer := container.NewBorder(nil, nil, nil, aboutBtn,
-		hintText("🔒 "+T("Oturum anahtarları diske yazılmaz, macOS Anahtar Zinciri'nde (Keychain) saklanır.")))
+		hintText("🔒 "+secretStoreNote()))
 
 	content := container.NewVBox(
 		general,
@@ -290,7 +375,7 @@ func showSettings(app fyne.App, onChanged func()) {
 	)
 	w.SetContent(container.NewScroll(container.NewPadded(content)))
 	w.Show()
-	rememberWindowFrame(w, "AITempoSettingsWindow")
+	rememberWindowFrame(w, "AITempoSettingsWindow.v2")
 	activateApp()
 }
 
@@ -313,7 +398,16 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 	nameEntry.SetPlaceHolder(T("örn. e-posta adresiniz"))
 	nameEntry.SetText(acc.Name)
 
-	keyEntry := widget.NewPasswordEntry()
+	// Çok satırlı ve görünür: uzun token'ın başı/sonu kontrol edilebilsin.
+	keyEntry := widget.NewMultiLineEntry()
+	keyEntry.Wrapping = fyne.TextWrapBreak
+	keyEntry.SetMinRowsVisible(4)
+	keyInfo := canvas.NewText("", colorMuted)
+	keyInfo.TextSize = 11
+	keyEntry.OnChanged = func(string) {
+		keyInfo.Text, keyInfo.Color = keySummary(normalizeKey(keyEntry.Text))
+		keyInfo.Refresh()
+	}
 	if existing != nil && existing.SessionKey != "" {
 		keyEntry.SetPlaceHolder(T("Değiştirmek için yeni anahtar girin"))
 	} else {
@@ -370,11 +464,51 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 	form := widget.NewForm(
 		widget.NewFormItem(T("Sağlayıcı"), providerSelect),
 		widget.NewFormItem(T("İsim"), nameEntry),
-		widget.NewFormItem(T("Oturum anahtarı"), container.NewVBox(keyEntry, keyHelp, container.NewHBox(snippetBtn))),
+		widget.NewFormItem(T("Oturum anahtarı"), container.NewVBox(keyEntry, keyInfo, keyHelp, container.NewHBox(snippetBtn))),
 		widget.NewFormItem("Organization ID", container.NewVBox(orgEntry, orgHelp)),
 		widget.NewFormItem("", enabledCheck),
 	)
-	editor := container.NewVBox(form, advanced)
+	// Test Et: formdaki (henüz kaydedilmemiş) bilgilerle tek bir sorgu yapar.
+	testResult := widget.NewLabel("")
+	testResult.Wrapping = fyne.TextWrapWord
+	var testBtn *widget.Button
+	testBtn = widget.NewButtonWithIcon(T("Test Et"), theme.MediaPlayIcon(), func() {
+		probe := acc
+		probe.OrganizationID = strings.TrimSpace(orgEntry.Text)
+		probe.ShowResetCredits = false
+		probe.SessionKey = normalizeKey(keyEntry.Text)
+		if probe.Provider == "cursor" {
+			probe.OrganizationID = ""
+			probe.SessionKey = strings.ReplaceAll(probe.SessionKey, "%3A%3A", "::")
+		}
+		if probe.SessionKey == "" && existing != nil {
+			probe.SessionKey = existing.SessionKey // alan boşsa kayıtlı anahtarla dene
+		}
+		if probe.SessionKey == "" {
+			testResult.SetText("✗ " + T("Oturum anahtarı gerekli."))
+			return
+		}
+		testBtn.Disable()
+		testResult.SetText(T("Test ediliyor…"))
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			info := provider.Get(probe.Provider).Query(ctx, probe)
+			cancel()
+			fyne.Do(func() {
+				testBtn.Enable()
+				if info.Success {
+					var parts []string
+					for _, m := range info.Metrics {
+						parts = append(parts, fmt.Sprintf("%s %.0f%%", m.Label, m.Percent))
+					}
+					testResult.SetText("✓ " + T("Çalışıyor:") + " " + strings.Join(parts, " · "))
+				} else {
+					testResult.SetText("✗ " + info.Error)
+				}
+			})
+		}()
+	})
+	editor := container.NewVBox(form, advanced, container.NewBorder(nil, nil, testBtn, nil, testResult))
 
 	title := T("Hesap Ekle")
 	if existing != nil {
@@ -388,7 +522,7 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 		acc.OrganizationID = strings.TrimSpace(orgEntry.Text)
 		acc.Enabled = enabledCheck.Checked
 		acc.ShowResetCredits = acc.Provider == "chatgpt" && resetCreditsCheck.Checked
-		key := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(keyEntry.Text), "Bearer "))
+		key := normalizeKey(keyEntry.Text)
 		if acc.Provider == "cursor" {
 			acc.OrganizationID = ""
 			key = strings.ReplaceAll(key, "%3A%3A", "::")
@@ -410,7 +544,7 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 		}
 		onSave(acc, key)
 	}, parent)
-	d.Resize(fyne.NewSize(520, 420))
+	d.Resize(fyne.NewSize(640, 560))
 	d.Show()
 }
 
@@ -433,4 +567,38 @@ func hintText(text string) *widget.Label {
 	l := widget.NewLabel(text)
 	l.Wrapping = fyne.TextWrapWord
 	return l
+}
+
+// secretStoreNote, anahtarların işletim sisteminde nerede saklandığını anlatır.
+func secretStoreNote() string {
+	if runtime.GOOS == "windows" {
+		return T("Oturum anahtarları diske yazılmaz, Windows Kimlik Bilgisi Yöneticisi'nde saklanır.")
+	}
+	return T("Oturum anahtarları diske yazılmaz, macOS Anahtar Zinciri'nde (Keychain) saklanır.")
+}
+
+// normalizeKey, yapıştırılan anahtardan boşlukları, satır sonlarını ve başındaki
+// "Bearer " önekini temizler.
+func normalizeKey(s string) string {
+	s = strings.Join(strings.Fields(s), "")
+	s = strings.TrimPrefix(s, "Bearer")
+	return s
+}
+
+// keySummary, anahtarın uzunluğunu, başını ve sonunu gösterir; kopyalarken
+// kesilmiş ("…" içeren) anahtarlar için uyarı döndürür.
+func keySummary(key string) (string, color.Color) {
+	if key == "" {
+		return "", colorMuted
+	}
+	r := []rune(key)
+	preview := key
+	if len(r) > 24 {
+		preview = string(r[:10]) + " … " + string(r[len(r)-10:])
+	}
+	text := Tf("%d karakter · %s", len(r), preview)
+	if strings.ContainsRune(key, '…') {
+		return "⚠ " + T("Anahtarda “…” var: kopyalarken kesilmiş olabilir.") + "  " + text, colorDanger
+	}
+	return "✓ " + text, colorGood
 }

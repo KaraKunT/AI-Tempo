@@ -15,3 +15,18 @@ func TestParseLogMetrics(t *testing.T) {
 		t.Fatalf("hata mesajı çözülmemeli: %+v", got)
 	}
 }
+
+func TestNormalizeKey(t *testing.T) {
+	if got := normalizeKey("  Bearer eyJabc\n.def \t.ghi\n"); got != "eyJabc.def.ghi" {
+		t.Fatalf("normalizeKey = %q", got)
+	}
+}
+
+func TestKeySummaryTruncated(t *testing.T) {
+	if text, _ := keySummary("eyJhbGciOiJSUzI1NiIs…nbGUtb2F1dGgyfDEw"); text[:3] != "⚠" {
+		t.Fatalf("kesilmiş anahtar uyarı vermeli: %q", text)
+	}
+	if text, _ := keySummary("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9"); text[:3] != "✓" {
+		t.Fatalf("sağlam anahtar ✓ ile başlamalı: %q", text)
+	}
+}

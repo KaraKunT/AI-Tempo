@@ -4,6 +4,10 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -42,6 +46,9 @@ type RateLimitInfo struct {
 	Success     bool
 	Error       string
 	Metrics     []UsageMetric
+	// AuthExpired, hatanın süresi dolmuş/geçersiz oturum anahtarından
+	// kaynaklandığını belirtir; arayüz "Anahtarı Güncelle" düğmesi gösterir.
+	AuthExpired bool
 	// ResetCredits, ChatGPT Codex limit sıfırlama haklarıdır; yalnızca hesapta
 	// "Codex sıfırlama haklarını göster" açıksa doldurulur.
 	ResetCredits *ResetCredits
@@ -143,4 +150,90 @@ func isCloudflareBlock(resp *http.Response, body []byte) bool {
 	}
 	b := string(body)
 	return strings.Contains(b, "Just a moment") || strings.Contains(b, "challenge-platform")
+}
+
+// fetch, newReq ile oluşturulan isteği gönderir. Yanıt bir Cloudflare engeliyse
+// (genelde geçicidir) 3 sn sonra yeni bir bağlantıyla bir kez daha dener.
+// Bağlantı/okuma hatasında info.Error doldurulur ve ok=false döner.
+func fetch(ctx context.Context, info *RateLimitInfo, newReq func() (*http.Request, error)) (resp *http.Response, body []byte, ok bool) {
+	for attempt := 0; ; attempt++ {
+		req, err := newReq()
+		if err != nil {
+			info.Error = T("İstek hatası")
+			return nil, nil, false
+		}
+		resp, err = httpClient.Do(req)
+		if err != nil {
+			info.Error = T("API bağlantı hatası")
+			return nil, nil, false
+		}
+		body, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			info.Error = T("Yanıt hatası")
+			return nil, nil, false
+		}
+		if attempt > 0 || resp.StatusCode == http.StatusOK || !isCloudflareBlock(resp, body) {
+			return resp, body, true
+		}
+		select {
+		case <-time.After(3 * time.Second):
+		case <-ctx.Done():
+			info.Error = T("API bağlantı hatası")
+			return nil, nil, false
+		}
+	}
+}
+
+// checkStatus, 200 dışı yanıtları sınıflandırır ve info'yu doldurur; yanıt
+// kullanılabilirse true döner. keyValid, anahtarın süresinin dolmadığı yerel
+// olarak biliniyorsa true'dur (örn. JWT'nin exp alanı): o durumda 401/403 bir
+// oturum sorunu değil, geçici bir erişim engeli sayılır.
+func checkStatus(info *RateLimitInfo, resp *http.Response, body []byte, expiredMsg string, keyValid bool) bool {
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return true
+	case isCloudflareBlock(resp, body):
+		info.Error = Tf("Cloudflare engeli (HTTP %d), tekrar denenecek", resp.StatusCode)
+	case (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && keyValid:
+		info.Error = Tf("Erişim geçici olarak reddedildi (HTTP %d), tekrar denenecek", resp.StatusCode) + bodyHint(body)
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		info.Error = expiredMsg + fmt.Sprintf(" (HTTP %d)", resp.StatusCode)
+		info.AuthExpired = true
+	default:
+		info.Error = Tf("Sunucu hatası (HTTP %d)", resp.StatusCode) + bodyHint(body)
+	}
+	return false
+}
+
+// bodyHint, hata teşhisi için yanıt gövdesinin kısa, tek satırlık başını döndürür.
+func bodyHint(body []byte) string {
+	s := strings.Join(strings.Fields(string(body)), " ")
+	if s == "" {
+		return ""
+	}
+	if r := []rune(s); len(r) > 80 {
+		s = string(r[:80]) + "…"
+	}
+	return ": " + s
+}
+
+// jwtExpiry, JWT biçimindeki bir token'ın exp (bitiş) zamanını döndürür;
+// JWT değilse ya da okunamazsa sıfır döner.
+func jwtExpiry(token string) time.Time {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return time.Time{}
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(parts[1], "="))
+	if err != nil {
+		return time.Time{}
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if json.Unmarshal(payload, &claims) != nil || claims.Exp == 0 {
+		return time.Time{}
+	}
+	return time.Unix(claims.Exp, 0)
 }

@@ -35,10 +35,12 @@ var store = usage.Default
 func onStoreChange(f func()) { store.OnChange(func() { fyne.Do(f) }) }
 
 var (
-	mainWindow   fyne.Window
-	tabContainer *container.AppTabs
-	accountTabs  []*accountTabHandle
-	mainBody     *fyne.Container
+	// accountsChanged, hesaplar veya ayarlar değişince pencereyi ve sorguları yeniler.
+	accountsChanged = func() {}
+	mainWindow      fyne.Window
+	tabContainer    *container.AppTabs
+	accountTabs     []*accountTabHandle
+	mainBody        *fyne.Container
 )
 
 // Run, uygulamayı başlatır ve kapanana kadar bloklar.
@@ -84,15 +86,14 @@ func Run() {
 	mainWindow.Resize(fyne.NewSize(float32(width), float32(height)))
 
 	openSettings := func() {}
-	openSettings = func() {
-		showSettings(myApp, func() {
-			loadAccountTabs(openSettings)
-			// Dil değişmiş olabilir: başlık ve düğmeler yeniden oluşturulur.
-			mainWindow.SetContent(buildMainLayout(mainBody, newStatusBar(), refreshCurrentTab, refreshAllTabs, openSettings))
-			store.Notify()
-			store.Refresh(config.EnabledAccounts(), false) // yeni/değişen hesaplar hemen sorgulanır
-		})
+	accountsChanged = func() {
+		loadAccountTabs(openSettings)
+		// Dil değişmiş olabilir: başlık ve düğmeler yeniden oluşturulur.
+		mainWindow.SetContent(buildMainLayout(mainBody, newStatusBar(), refreshCurrentTab, refreshAllTabs, openSettings))
+		store.Notify()
+		store.Refresh(config.EnabledAccounts(), false) // yeni/değişen hesaplar hemen sorgulanır
 	}
+	openSettings = func() { showSettings(myApp, accountsChanged) }
 
 	tabContainer = container.NewAppTabs()
 	mainBody = container.NewStack()

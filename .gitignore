@@ -9,6 +9,7 @@ config.json
 /ai-kota-sorgulama
 *.app/
 /dist/
+*.exe
 
 # macOS / editör
 .DS_Store

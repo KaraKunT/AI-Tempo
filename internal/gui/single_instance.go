@@ -2,11 +2,9 @@ package gui
 
 import (
 	"bufio"
-	"errors"
 	"net"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"ai-tempo/internal/config"
@@ -23,7 +21,7 @@ func claimSingleInstance(onShow func()) bool {
 	_ = os.MkdirAll(filepath.Dir(path), 0o700)
 
 	ln, err := net.Listen("unix", path)
-	if err != nil && errors.Is(err, syscall.EADDRINUSE) {
+	if err != nil && socketFileExists(path) {
 		// Soket var: gerçekten dinleyen bir kopya mı, yoksa çökmüş bir kopyadan mı kalma?
 		if c, dialErr := net.DialTimeout("unix", path, time.Second); dialErr == nil {
 			_, _ = c.Write([]byte("show\n"))
@@ -52,6 +50,14 @@ func claimSingleInstance(onShow func()) bool {
 		}
 	}()
 	return true
+}
+
+// socketFileExists, soket dosyasının var olup olmadığını söyler. Windows'ta
+// "adres kullanımda" hatası farklı bir kodla geldiği için hata türüne değil
+// dosyanın varlığına bakılır.
+func socketFileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // releaseSingleInstance, çıkışta soket dosyasını kaldırır.

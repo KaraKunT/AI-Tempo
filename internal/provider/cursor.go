@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"time"
 
@@ -39,37 +38,20 @@ func (cursorProvider) Query(ctx context.Context, account config.Account) RateLim
 
 	url := "https://cursor.com/api/dashboard/get-current-period-usage"
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBufferString("{}"))
-	if err != nil {
-		info.Error = T("İstek hatası")
-		return info
-	}
-
-	req.AddCookie(&http.Cookie{
-		Name:  "WorkosCursorSessionToken",
-		Value: account.SessionKey,
+	resp, body, ok := fetch(ctx, &info, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBufferString("{}"))
+		if err != nil {
+			return nil, err
+		}
+		req.AddCookie(&http.Cookie{Name: "WorkosCursorSessionToken", Value: account.SessionKey})
+		req.Header.Set("User-Agent", browserUserAgent)
+		req.Header.Set("Accept", "*/*")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", "https://cursor.com")
+		req.Header.Set("Referer", "https://cursor.com/dashboard/spending")
+		return req, nil
 	})
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15)")
-	req.Header.Set("Accept", "*/*")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Origin", "https://cursor.com")
-	req.Header.Set("Referer", "https://cursor.com/dashboard/spending")
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		info.Error = T("API bağlantı hatası")
-		return info
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		info.Error = T("Yanıt hatası")
-		return info
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		info.Error = T("Session süresi dolmuş")
+	if !ok || !checkStatus(&info, resp, body, T("Session süresi dolmuş"), false) {
 		return info
 	}
 

@@ -3,7 +3,7 @@
 [English](README.md) · **Türkçe**
 
 **Claude.ai**, **Cursor** ve **ChatGPT** hesaplarınızın kullanım limitlerini
-tek yerden takip eden bir macOS menü çubuğu uygulaması. Her hesap kendi
+tek yerden takip eden bir macOS menü çubuğu uygulaması (Windows sürümü de var). Her hesap kendi
 sekmesinde görünür. Her kota kartında **kullanım yüzdesi**, **sıfırlanmaya
 kalan süre** ve **tempo** gösterilir. Tempo, bu hızla kotanın dönem bitmeden
 dolup dolmayacağını söyler.
@@ -27,6 +27,12 @@ Ayarlar → Dil bölümünden değiştirebilirsiniz.
 
 Uygulama Developer ID ile imzalı ve Apple tarafından onaylı (notarize
 edilmiş). Güvenlik uyarısı olmadan açılır.
+
+**Windows:** Aynı sürümden **`AI-Tempo-Windows.zip`** dosyasını indirin,
+istediğiniz yere açın ve **AI Tempo.exe**'yi çalıştırın. Uygulama saatin
+yanındaki sistem tepsisinde çalışır. Exe henüz kod imzalı değil; ilk
+açılışta "Windows bilgisayarınızı korudu" uyarısı çıkarsa **Ek bilgi →
+Yine de çalıştır**'a basın.
 
 AI Tempo varsayılan olarak yalnızca menü çubuğunda çalışır, Dock'ta ve
 Cmd+Tab'da görünmez. Dock'ta görmek isterseniz **Ayarlar → Dock'ta göster**
@@ -87,6 +93,7 @@ mevcut anahtar korunur.
 | Ayar | Seçenekler |
 |---|---|
 | Dock'ta göster | Kapalı (varsayılan): yalnızca menü çubuğu |
+| Oturum açılışında başlat | Kapalı (varsayılan). Uygulamanın Uygulamalar klasöründe olması ve macOS 13+ gerekir |
 | Dil | Otomatik (sistem dili, varsayılan), English, Türkçe |
 | Otomatik yenileme | 5, 10, 15, 30 (varsayılan) dakika · 1, 2, 4, 8, 16, 24 saat |
 | Geçmişi sakla | 2, 7, 14, 35 (varsayılan), 60, 90 gün. Cursor gibi aylık dönemler için en az 35 gün seçin |
@@ -96,8 +103,10 @@ mevcut anahtar korunur.
 | Ne | Nerede |
 |---|---|
 | Hesaplar, ID'ler, ayarlar | `~/Library/Application Support/ai-tempo/settings.json` |
-| Oturum anahtarları / token'lar | macOS **Anahtar Zinciri** (Keychain), servis adı `ai-tempo`. Diske asla düz metin olarak yazılmaz |
+| Oturum anahtarları / token'lar | macOS **Anahtar Zinciri** (Keychain), servis adı `ai-tempo` · Windows **Kimlik Bilgisi Yöneticisi** (`ai-tempo/…`). Diske asla düz metin olarak yazılmaz |
 | Sorgu geçmişi ve grafik verisi | `~/Library/Application Support/ai-tempo/history.db` (SQLite) |
+
+Windows'ta bu dosyalar `%AppData%\ai-tempo\` klasöründe durur.
 
 Bütün veriler Mac'inizde kalır. AI Tempo yalnızca claude.ai, cursor.com ve
 chatgpt.com ile konuşur.
@@ -126,13 +135,7 @@ make run       # derler ve terminalden çalıştırır
 make package   # "AI Tempo.app" üretir
 make release   # Intel + Apple Silicon (universal), imzalı + onaylı → dist/AI-Tempo-macOS.zip
 make release NOTARIZE=0   # yalnızca imzalar (Developer ID sertifikası gerekir)
-```
-
-Oturum açılışında başlatma:
-
-```bash
-make login-add      # bu klasördeki .app'i giriş öğelerine ekler
-make login-remove
+make release-windows      # Windows exe → dist/AI-Tempo-Windows.zip (gerekli: brew install mingw-w64)
 ```
 
 ## Proje yapısı

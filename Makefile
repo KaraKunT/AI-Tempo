@@ -9,12 +9,13 @@ FYNE         := $(GOBIN)/fyne
 SIGN_IDENTITY  ?= $(shell security find-identity -v -p codesigning | grep -m1 "Developer ID Application" | awk '{print $$2}')
 NOTARY_PROFILE ?= ai-tempo
 NOTARIZE       ?= 1
+WIN_CC         ?= x86_64-w64-mingw32-gcc
 
 # Sürüm: son git etiketinden (v1.2.3 → 1.2.3). Yeni sürümde: make release VERSION=1.2.4
 VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
 LDFLAGS := -X ai-tempo/internal/gui.Version=$(VERSION)
 
-.PHONY: help build run clean tidy fmt package release login-add login-remove
+.PHONY: help build run clean tidy fmt package release release-windows
 
 ## help: Kullanılabilir komutları listeler (varsayılan hedef)
 help:
@@ -78,13 +79,17 @@ endif
 	ditto -c -k --keepParent "$(APP_BUNDLE)" dist/AI-Tempo-macOS.zip
 	@echo "✓ dist/AI-Tempo-macOS.zip hazır ($$(lipo -archs "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"))"
 
-## login-add: .app'i oturum açılışında otomatik başlatılacak şekilde ekler
-login-add:
-	osascript -e 'tell application "System Events" to make login item at end with properties {path:"$(CURDIR)/$(APP_BUNDLE)", hidden:true}'
-
-## login-remove: .app'i oturum açılış öğelerinden kaldırır
-login-remove:
-	osascript -e 'tell application "System Events" to delete login item "$(DISPLAY_NAME)"'
+## release-windows: Windows (64-bit) sürümünü bu Mac'ten çapraz derler ve
+## dist/AI-Tempo-Windows.zip olarak paketler. mingw-w64 gerekir (brew install mingw-w64).
+## Exe imzasızdır; Windows ilk açılışta SmartScreen uyarısı gösterebilir.
+release-windows: $(FYNE)
+	@command -v $(WIN_CC) >/dev/null || { echo "❌ $(WIN_CC) yok: brew install mingw-w64"; exit 1; }
+	CGO_ENABLED=1 CC=$(WIN_CC) GOOS=windows GOARCH=amd64 $(FYNE) package -os windows -name "$(DISPLAY_NAME)" -appID $(APP_ID) -appVersion "$(VERSION)" -icon "$(CURDIR)/assets/Icon.png" -src ./cmd/ai-tempo
+	mkdir -p dist
+	mv "cmd/ai-tempo/$(DISPLAY_NAME).exe" "dist/$(DISPLAY_NAME).exe"
+	rm -f dist/AI-Tempo-Windows.zip
+	cd dist && zip -q AI-Tempo-Windows.zip "$(DISPLAY_NAME).exe" && rm "$(DISPLAY_NAME).exe"
+	@echo "✓ dist/AI-Tempo-Windows.zip hazır"
 
 $(FYNE):
 	@echo "fyne CLI bulunamadı, kuruluyor..."
