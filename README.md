@@ -148,3 +148,7 @@ To add a provider, implement the `Provider` interface in a new file under
 `internal/gui/icons/` and `providerIcon`. UI strings are written in Turkish
 and wrapped in `T(...)`. Add the English translation to
 `internal/i18n/en.go`.
+
+## License
+
+[MIT](LICENSE)

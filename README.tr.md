@@ -153,3 +153,7 @@ arayüzünü uygulayan bir dosya yazın ve `init()` içinde kaydedin. İkonunu
 `internal/gui/icons/` klasörüne ve `providerIcon` fonksiyonuna ekleyin.
 Arayüz metinleri Türkçe yazılır ve `T(...)` ile sarılır. İngilizce
 karşılığını `internal/i18n/en.go` dosyasına ekleyin.
+
+## Lisans
+
+[MIT](LICENSE)

@@ -1,4 +1,6 @@
 # Gizli bilgiler — ASLA commit'lenmez
+AGENT.md
+CLAUDE.local.md
 config.json
 *.json.bak
 
