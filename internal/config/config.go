@@ -36,15 +36,23 @@ type Account struct {
 // (~/Library/Application Support/ai-tempo/settings.json).
 type Settings struct {
 	RefreshMinutes int       `json:"refresh_minutes"`
+	HistoryDays    int       `json:"history_days"`       // sorgu geçmişi ve grafik verisinin saklanma süresi
+	Language       string    `json:"language,omitempty"` // "en" (varsayılan) veya "tr"
 	Accounts       []Account `json:"accounts"`
 }
 
-const defaultRefreshMinutes = 5
+const (
+	defaultRefreshMinutes = 5
+	defaultHistoryDays    = 35 // aylık dönemleri (Cursor) de kapsasın
+)
 
 // Current, uygulamanın o an yüklü ayarlarıdır (Load ile doldurulur).
 var Current *Settings
 
 func settingsPath() string { return settingsPathFor(appID) }
+
+// DataDir, ayarların ve sorgu geçmişinin tutulduğu uygulama klasörüdür.
+func DataDir() string { return filepath.Dir(settingsPath()) }
 
 func settingsPathFor(id string) string {
 	dir, err := os.UserConfigDir()
@@ -97,7 +105,7 @@ func Load() (*Settings, error) {
 	if err := migrateFromOldName(); err != nil {
 		return nil, err
 	}
-	s := &Settings{RefreshMinutes: defaultRefreshMinutes}
+	s := &Settings{RefreshMinutes: defaultRefreshMinutes, HistoryDays: defaultHistoryDays}
 	data, err := os.ReadFile(settingsPath())
 	switch {
 	case err == nil:
@@ -124,6 +132,9 @@ func Load() (*Settings, error) {
 	}
 	if s.RefreshMinutes <= 0 {
 		s.RefreshMinutes = defaultRefreshMinutes
+	}
+	if s.HistoryDays <= 0 {
+		s.HistoryDays = defaultHistoryDays
 	}
 	return s, nil
 }

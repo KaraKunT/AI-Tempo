@@ -6,6 +6,7 @@ config.json
 /ai-tempo
 /ai-kota-sorgulama
 *.app/
+/dist/
 
 # macOS / editör
 .DS_Store

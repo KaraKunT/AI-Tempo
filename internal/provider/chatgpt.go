@@ -45,7 +45,7 @@ func (chatgptProvider) Query(ctx context.Context, account config.Account) RateLi
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		info.Error = "İstek hatası"
+		info.Error = T("İstek hatası")
 		return info
 	}
 
@@ -58,54 +58,60 @@ func (chatgptProvider) Query(ctx context.Context, account config.Account) RateLi
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		info.Error = "API bağlantı hatası"
+		info.Error = T("API bağlantı hatası")
 		return info
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		info.Error = "Yanıt hatası"
+		info.Error = T("Yanıt hatası")
 		return info
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		info.Error = "Token süresi dolmuş"
+		info.Error = T("Token süresi dolmuş")
 		return info
 	}
 	if resp.StatusCode != http.StatusOK {
-		info.Error = fmt.Sprintf("API hatası (HTTP %d)", resp.StatusCode)
+		info.Error = Tf("API hatası (HTTP %d)", resp.StatusCode)
 		return info
 	}
 
 	var response chatgptUsageResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		info.Error = "Veri parse hatası"
+		info.Error = T("Veri parse hatası")
 		return info
 	}
 
 	var metrics []UsageMetric
 	if w := response.RateLimit.PrimaryWindow; w != nil {
 		metrics = append(metrics, UsageMetric{
-			Label:        chatgptWindowLabel(w.LimitWindowSeconds, "Kullanım Limiti"),
+			ID:           chatgptWindowID(w.LimitWindowSeconds, "primary"),
+			Label:        chatgptWindowLabel(w.LimitWindowSeconds, T("Kullanım Limiti")),
 			Subtitle:     chatgptWindowSubtitle(w.LimitWindowSeconds),
 			Percent:      w.UsedPercent,
 			ResetsInfo:   formatResetTimeUnixSeconds(w.ResetAt),
 			TimeProgress: timeProgress(time.Unix(w.ResetAt, 0), float64(w.LimitWindowSeconds)),
+			WindowStart:  windowStart(time.Unix(w.ResetAt, 0), w.LimitWindowSeconds),
+			ResetsAt:     time.Unix(w.ResetAt, 0),
 		})
 	}
 	if w := response.RateLimit.SecondaryWindow; w != nil {
 		metrics = append(metrics, UsageMetric{
-			Label:        chatgptWindowLabel(w.LimitWindowSeconds, "İkincil Limit"),
+			ID:           chatgptWindowID(w.LimitWindowSeconds, "secondary"),
+			Label:        chatgptWindowLabel(w.LimitWindowSeconds, T("İkincil Limit")),
 			Subtitle:     chatgptWindowSubtitle(w.LimitWindowSeconds),
 			Percent:      w.UsedPercent,
 			ResetsInfo:   formatResetTimeUnixSeconds(w.ResetAt),
 			TimeProgress: timeProgress(time.Unix(w.ResetAt, 0), float64(w.LimitWindowSeconds)),
+			WindowStart:  windowStart(time.Unix(w.ResetAt, 0), w.LimitWindowSeconds),
+			ResetsAt:     time.Unix(w.ResetAt, 0),
 		})
 	}
 
 	if len(metrics) == 0 {
-		info.Error = "Kota bilgisi bulunamadı"
+		info.Error = T("Kota bilgisi bulunamadı")
 		return info
 	}
 
@@ -115,7 +121,7 @@ func (chatgptProvider) Query(ctx context.Context, account config.Account) RateLi
 		// Ek bilgi; alınamazsa ana kota yine gösterilir.
 		rc, err := fetchChatGPTResetCredits(ctx, account)
 		if err != nil {
-			rc = ResetCredits{Error: "Sıfırlama hakları alınamadı"}
+			rc = ResetCredits{Error: T("Sıfırlama hakları alınamadı")}
 		}
 		info.ResetCredits = &rc
 	}
@@ -175,7 +181,7 @@ func parseChatGPTResetCredits(body []byte) (ResetCredits, error) {
 		t, _ := time.Parse(time.RFC3339Nano, c.ExpiresAt)
 		title := c.Title
 		if title == "" {
-			title = "Sıfırlama hakkı"
+			title = T("Sıfırlama hakkı")
 		}
 		rc.Available = append(rc.Available, ResetCredit{Title: title, ExpiresAt: t})
 	}
@@ -234,9 +240,20 @@ func parseChatGPTResetHistory(body []byte) (ResetHistory, error) {
 func chatgptWindowLabel(seconds int64, fallback string) string {
 	switch seconds {
 	case 604800:
-		return "Haftalık Limit"
+		return T("Haftalık Limit")
 	case 5 * 3600:
-		return "5 Saatlik Limit"
+		return T("5 Saatlik Limit")
+	}
+	return fallback
+}
+
+// chatgptWindowID, göstergenin dilden bağımsız sabit adıdır.
+func chatgptWindowID(seconds int64, fallback string) string {
+	switch seconds {
+	case 604800:
+		return "weekly"
+	case 5 * 3600:
+		return "session"
 	}
 	return fallback
 }
@@ -249,16 +266,16 @@ func chatgptWindowSubtitle(seconds int64) string {
 	case seconds%604800 == 0:
 		weeks := seconds / 604800
 		if weeks == 1 {
-			return "Haftalık kullanım"
+			return T("Haftalık kullanım")
 		}
-		return fmt.Sprintf("%d haftalık kullanım", weeks)
+		return Tf("%d haftalık kullanım", weeks)
 	case seconds%86400 == 0:
 		days := seconds / 86400
-		return fmt.Sprintf("%d günlük kullanım", days)
+		return Tf("%d günlük kullanım", days)
 	case seconds%3600 == 0:
 		hours := seconds / 3600
-		return fmt.Sprintf("%d saatlik kullanım", hours)
+		return Tf("%d saatlik kullanım", hours)
 	default:
-		return "Dönemsel kullanım"
+		return T("Dönemsel kullanım")
 	}
 }

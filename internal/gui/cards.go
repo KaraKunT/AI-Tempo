@@ -49,18 +49,18 @@ func buildMainLayout(body, status fyne.CanvasObject, onRefreshCurrent, onRefresh
 	titleText.TextSize = 20
 	titleText.TextStyle = fyne.TextStyle{Bold: true}
 
-	subtitleText := canvas.NewText("Kullanım Limitleri Panosu", colorMuted)
+	subtitleText := canvas.NewText(T("Kullanım Limitleri Panosu"), colorMuted)
 	subtitleText.TextSize = 13
 
 	titleBox := container.NewVBox(titleText, subtitleText)
 
-	refreshCurrentBtn := widget.NewButtonWithIcon("Yenile", theme.ViewRefreshIcon(), onRefreshCurrent)
+	refreshCurrentBtn := widget.NewButtonWithIcon(T("Yenile"), theme.ViewRefreshIcon(), onRefreshCurrent)
 	refreshCurrentBtn.Importance = widget.HighImportance
 
-	refreshAllBtn := widget.NewButtonWithIcon("Tümünü Yenile", theme.ViewRestoreIcon(), onRefreshAll)
+	refreshAllBtn := widget.NewButtonWithIcon(T("Tümünü Yenile"), theme.ViewRestoreIcon(), onRefreshAll)
 	refreshAllBtn.Importance = widget.LowImportance
 
-	configBtn := widget.NewButtonWithIcon("Ayarlar", theme.SettingsIcon(), onSettings)
+	configBtn := widget.NewButtonWithIcon(T("Ayarlar"), theme.SettingsIcon(), onSettings)
 	configBtn.Importance = widget.LowImportance
 
 	buttons := container.NewCenter(container.NewHBox(configBtn, refreshAllBtn, refreshCurrentBtn))
@@ -105,19 +105,34 @@ type accountTabHandle struct {
 // createAccountTab, tek bir hesap için sekme oluşturur. Sorguyu kendisi yapmaz;
 // usage.Store'daki sonucu gösterir (bkz. internal/usage).
 func createAccountTab(account config.Account) *accountTabHandle {
-	provider := provider.Get(account.Provider)
+	prov := provider.Get(account.Provider)
 
 	body := container.NewVBox()
-	scrollContent := container.NewScroll(container.NewPadded(body))
+	logSection, refreshLog := newLogSection(account.ID)
+	chartCards := container.NewVBox()
+	chartRange := rangePeriod
+	var lastInfo *provider.RateLimitInfo
+	renderCharts := func() {
+		chartCards.Objects = newChartsSection(account.ID, lastInfo, chartRange)
+		chartCards.Refresh()
+	}
+	chartFilter := newRangeSelector([]timeRange{rangePeriod, rangeToday, rangeYesterday, rangeWeek, rangeMonth}, chartRange, func(r timeRange) {
+		chartRange = r
+		renderCharts()
+	})
+	charts := container.NewVBox(container.NewCenter(chartFilter), chartCards)
+	charts.Hide()
+	scrollContent := container.NewScroll(container.NewPadded(container.NewVBox(body, charts, logSection)))
+	var tabItem *container.TabItem
 
 	render := func() {
 		info, loading := store.Get(account.ID)
 		body.RemoveAll()
 		switch {
 		case info == nil:
-			body.Add(newUsageCard("Yükleniyor...", provider.DisplayName()).container)
+			body.Add(newUsageCard(T("Yükleniyor..."), prov.DisplayName()).container)
 		case !info.Success || len(info.Metrics) == 0:
-			errCard := newUsageCard(provider.DisplayName(), account.Name)
+			errCard := newUsageCard(prov.DisplayName(), account.Name)
 			errCard.setError(info.Error)
 			body.Add(errCard.container)
 			body.Add(newRetryCounterRow(account))
@@ -136,12 +151,22 @@ func createAccountTab(account config.Account) *accountTabHandle {
 			body.Objects = append([]fyne.CanvasObject{container.NewPadded(bar)}, body.Objects...)
 		}
 		body.Refresh()
+		refreshLog()
+		if info != nil && info.Success {
+			lastInfo = info
+			renderCharts()
+			charts.Show()
+		}
+		if tabItem != nil {
+			tabItem.Text = tabTitle(account.Name, info, loading)
+		}
 	}
+	tabItem = container.NewTabItemWithIcon(account.Name, providerIcon(account.Provider), scrollContent)
 	render()
 
 	return &accountTabHandle{
 		account: account,
-		tabItem: container.NewTabItemWithIcon(account.Name, providerIcon(account.Provider), scrollContent),
+		tabItem: tabItem,
 		render:  render,
 	}
 }
@@ -150,30 +175,42 @@ func createAccountTab(account config.Account) *accountTabHandle {
 // sıfırlayıp hemen yeniden deneyen düğmeyi gösterir.
 func newRetryCounterRow(account config.Account) fyne.CanvasObject {
 	n := store.Failures(account.ID)
-	msg := fmt.Sprintf("Deneme: %d/%d", n, usage.MaxAutoRetries)
+	msg := Tf("Deneme: %d/%d", n, usage.MaxAutoRetries)
 	col := colorMuted
 	if n >= usage.MaxAutoRetries {
-		msg += " — otomatik kontrol durduruldu"
+		msg += " — " + T("otomatik kontrol durduruldu")
 		col = colorDanger
 	}
 	text := canvas.NewText(msg, col)
 	text.TextSize = 12
-	btn := widget.NewButtonWithIcon("Sayacı Sıfırla", theme.ViewRefreshIcon(), func() {
+	btn := widget.NewButtonWithIcon(T("Sayacı Sıfırla"), theme.ViewRefreshIcon(), func() {
 		store.ResetFailures(account)
 	})
 	btn.Importance = widget.LowImportance
 	return container.NewPadded(container.NewBorder(nil, nil, nil, btn, container.NewCenter(text)))
 }
 
+// tabTitle, sekme başlığına hesabın durumunu ekler; "Tümünü Yenile"de hangi
+// hesabın sorgulandığı ve hangisinin hata verdiği sekmelerden görünür.
+func tabTitle(name string, info *provider.RateLimitInfo, loading bool) string {
+	switch {
+	case loading:
+		return "⟳ " + name
+	case info != nil && !info.Success:
+		return "⚠ " + name
+	}
+	return name
+}
+
 // newEmptyState, hiç hesap yokken gösterilen karşılama içeriğidir.
 func newEmptyState(onSettings func()) fyne.CanvasObject {
-	title := canvas.NewText("Henüz hesap eklenmedi", nil)
+	title := canvas.NewText(T("Henüz hesap eklenmedi"), nil)
 	title.TextSize = 18
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.Alignment = fyne.TextAlignCenter
-	sub := canvas.NewText("Claude, Cursor veya ChatGPT hesabınızı Ayarlar'dan ekleyin.", colorMuted)
+	sub := canvas.NewText(T("Claude, Cursor veya ChatGPT hesabınızı Ayarlar'dan ekleyin."), colorMuted)
 	sub.Alignment = fyne.TextAlignCenter
-	btn := widget.NewButtonWithIcon("Hesap Ekle", theme.ContentAddIcon(), onSettings)
+	btn := widget.NewButtonWithIcon(T("Hesap Ekle"), theme.ContentAddIcon(), onSettings)
 	btn.Importance = widget.HighImportance
 	return container.NewCenter(container.NewVBox(title, sub, container.NewCenter(btn)))
 }
@@ -203,7 +240,7 @@ func newUsageCard(title, subtitle string) *usageCard {
 	percentText.TextStyle = fyne.TextStyle{Bold: true}
 	percentText.Alignment = fyne.TextAlignTrailing
 
-	statusText := canvas.NewText("Yükleniyor", colorMuted)
+	statusText := canvas.NewText(T("Yükleniyor"), colorMuted)
 	statusText.TextSize = 11
 	statusText.TextStyle = fyne.TextStyle{Bold: true}
 	statusText.Alignment = fyne.TextAlignCenter
@@ -259,18 +296,18 @@ func (c *usageCard) update(percent float64, resetInfo string, timeProgress float
 
 	switch {
 	case percent >= 100:
-		c.statusText.Text = "● DOLU"
+		c.statusText.Text = "● " + T("DOLU")
 	case percent >= 80:
-		c.statusText.Text = "● YÜKSEK"
+		c.statusText.Text = "● " + T("YÜKSEK")
 	case percent <= 0:
-		c.statusText.Text = "● SIFIRLANDI"
+		c.statusText.Text = "● " + T("SIFIRLANDI")
 	default:
-		c.statusText.Text = "● NORMAL"
+		c.statusText.Text = "● " + T("NORMAL")
 	}
 	c.setStatusColor(col)
 
 	if resetInfo != "" {
-		c.resetLabel.SetText("Sıfırlanmaya: " + resetInfo)
+		c.resetLabel.SetText(T("Sıfırlanmaya:") + " " + resetInfo)
 	} else {
 		c.resetLabel.SetText("")
 	}
@@ -286,11 +323,11 @@ func (c *usageCard) update(percent float64, resetInfo string, timeProgress float
 func paceLabel(p provider.Pace) (string, color.Color) {
 	switch p {
 	case provider.PaceFast:
-		return "Tempo: hızlı ⚠", colorWarning
+		return T("Tempo: hızlı") + " ⚠", colorWarning
 	case provider.PaceSlow:
-		return "Tempo: rahat", colorGood
+		return T("Tempo: rahat"), colorGood
 	case provider.PaceNormal:
-		return "Tempo: normal", colorAccent
+		return T("Tempo: normal"), colorAccent
 	}
 	return "", colorMuted
 }
@@ -300,7 +337,7 @@ func (c *usageCard) setError(msg string) {
 	c.percentText.Color = colorDanger
 	c.percentText.Refresh()
 
-	c.statusText.Text = "● HATA"
+	c.statusText.Text = "● " + T("HATA")
 	c.setStatusColor(colorDanger)
 
 	c.bar.SetValue(0, colorMuted)

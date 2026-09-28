@@ -4,13 +4,30 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"ai-tempo/internal/i18n"
 )
 
 var turkishMonths = []string{"Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"}
 var turkishWeekdays = []string{"Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"}
 
+// monthName ve weekdayName, etkin dile göre kısa ay ve gün adını döndürür.
+func monthName(m time.Month) string {
+	if i18n.Lang() == i18n.Turkish {
+		return turkishMonths[m-1]
+	}
+	return m.String()[:3]
+}
+
+func weekdayName(d time.Weekday) string {
+	if i18n.Lang() == i18n.Turkish {
+		return turkishWeekdays[d]
+	}
+	return d.String()
+}
+
 // formatResetTime, RFC3339 formatındaki bir reset zamanını "X gün Y saat | 23 Eyl Salı 14:59"
-// biçiminde, Türkiye saatine (Europe/Istanbul) çevrilmiş olarak döndürür.
+// biçiminde, yerel saate çevrilmiş olarak döndürür.
 func formatResetTime(resetStr string) string {
 	resetsTime, err := time.Parse(time.RFC3339, resetStr)
 	if err != nil {
@@ -46,23 +63,22 @@ func formatResetTimeAt(resetsTime time.Time) string {
 	hours := int(duration.Hours()) % 24
 	mins := int(duration.Minutes()) % 60
 
-	loc, _ := time.LoadLocation("Europe/Istanbul")
-	turkishTime := resetsTime.In(loc)
+	turkishTime := resetsTime.In(time.Local)
 
 	switch {
 	case days > 0:
-		return fmt.Sprintf("%d gün %d saat | %s", days, hours, formatTurkishDate(turkishTime))
+		return Tf("%d gün %d saat | %s", days, hours, formatTurkishDate(turkishTime))
 	case hours > 0:
-		return fmt.Sprintf("%d saat %d dakika | %s", hours, mins, formatTurkishDate(turkishTime))
+		return Tf("%d saat %d dakika | %s", hours, mins, formatTurkishDate(turkishTime))
 	default:
-		return fmt.Sprintf("%d dakika | %s", mins, formatTurkishDate(turkishTime))
+		return Tf("%d dakika | %s", mins, formatTurkishDate(turkishTime))
 	}
 }
 
 // formatTurkishDate, bir zamanı "23 Eyl Salı 14:59" formatında Türkçe olarak yazar.
 func formatTurkishDate(t time.Time) string {
 	return fmt.Sprintf("%d %s %s %02d:%02d",
-		t.Day(), turkishMonths[t.Month()-1], turkishWeekdays[t.Weekday()], t.Hour(), t.Minute())
+		t.Day(), monthName(t.Month()), weekdayName(t.Weekday()), t.Hour(), t.Minute())
 }
 
 // timeProgress, bir pencerenin reset zamanı ve toplam uzunluğuna göre şimdiye
@@ -98,7 +114,7 @@ func parseUnixMilliString(s string) (int64, error) {
 // ShortDate, bir zamanı yerel saatte "23 Eyl" biçiminde yazar.
 func ShortDate(t time.Time) string {
 	t = t.In(time.Local)
-	return fmt.Sprintf("%d %s", t.Day(), turkishMonths[t.Month()-1])
+	return fmt.Sprintf("%d %s", t.Day(), monthName(t.Month()))
 }
 
 // ShortDateTime, bir zamanı yerel saatte "23 Eki 00:08" biçiminde yazar.
@@ -124,4 +140,12 @@ func abs(n int) int {
 		return -n
 	}
 	return n
+}
+
+// windowStart, reset zamanı ve pencere uzunluğundan dönemin başını hesaplar.
+func windowStart(resetAt time.Time, windowSeconds int64) time.Time {
+	if resetAt.IsZero() || resetAt.Unix() <= 0 || windowSeconds <= 0 {
+		return time.Time{}
+	}
+	return resetAt.Add(-time.Duration(windowSeconds) * time.Second)
 }

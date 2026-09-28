@@ -47,7 +47,7 @@ func (claudeProvider) Query(ctx context.Context, account config.Account) RateLim
 	for attempt := 0; ; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
-			info.Error = "İstek hatası"
+			info.Error = T("İstek hatası")
 			return info
 		}
 		req.AddCookie(&http.Cookie{Name: "sessionKeyV3", Value: account.SessionKey})
@@ -59,13 +59,13 @@ func (claudeProvider) Query(ctx context.Context, account config.Account) RateLim
 
 		resp, err = httpClient.Do(req)
 		if err != nil {
-			info.Error = "API bağlantı hatası"
+			info.Error = T("API bağlantı hatası")
 			return info
 		}
 		body, err = io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			info.Error = "Yanıt hatası"
+			info.Error = T("Yanıt hatası")
 			return info
 		}
 		if attempt > 0 || resp.StatusCode == http.StatusOK || !isCloudflareBlock(resp, body) {
@@ -74,37 +74,39 @@ func (claudeProvider) Query(ctx context.Context, account config.Account) RateLim
 		select {
 		case <-time.After(3 * time.Second):
 		case <-ctx.Done():
-			info.Error = "API bağlantı hatası"
+			info.Error = T("API bağlantı hatası")
 			return info
 		}
 	}
 
 	switch {
 	case resp.StatusCode != http.StatusOK && isCloudflareBlock(resp, body):
-		info.Error = fmt.Sprintf("Cloudflare engeli (HTTP %d), tekrar denenecek", resp.StatusCode)
+		info.Error = Tf("Cloudflare engeli (HTTP %d), tekrar denenecek", resp.StatusCode)
 		return info
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		info.Error = fmt.Sprintf("Session süresi dolmuş (HTTP %d)", resp.StatusCode)
+		info.Error = Tf("Session süresi dolmuş (HTTP %d)", resp.StatusCode)
 		return info
 	case resp.StatusCode != http.StatusOK:
-		info.Error = fmt.Sprintf("Sunucu hatası (HTTP %d)", resp.StatusCode)
+		info.Error = Tf("Sunucu hatası (HTTP %d)", resp.StatusCode)
 		return info
 	}
 
 	var response claudeUsageResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		info.Error = "Veri parse hatası"
+		info.Error = T("Veri parse hatası")
 		return info
 	}
 
 	const fiveHourSeconds = 5 * 3600
 	const sevenDaySeconds = 7 * 86400
 
+	var sessionEnd, weeklyEnd time.Time
 	sessionResets := ""
 	sessionTimeProgress := -1.0
 	if response.FiveHour.ResetsAt != "" {
 		sessionResets = formatResetTime(response.FiveHour.ResetsAt)
 		if t, err := time.Parse(time.RFC3339, response.FiveHour.ResetsAt); err == nil {
+			sessionEnd = t
 			sessionTimeProgress = timeProgress(t, fiveHourSeconds)
 		}
 	}
@@ -113,6 +115,7 @@ func (claudeProvider) Query(ctx context.Context, account config.Account) RateLim
 	if response.SevenDay.ResetsAt != "" {
 		weeklyResets = formatResetTime(response.SevenDay.ResetsAt)
 		if t, err := time.Parse(time.RFC3339, response.SevenDay.ResetsAt); err == nil {
+			weeklyEnd = t
 			weeklyTimeProgress = timeProgress(t, sevenDaySeconds)
 		}
 	}
@@ -120,18 +123,24 @@ func (claudeProvider) Query(ctx context.Context, account config.Account) RateLim
 	info.Success = true
 	info.Metrics = []UsageMetric{
 		{
-			Label:        "Mevcut Oturum",
-			Subtitle:     "Son 5 saatlik kullanım",
+			ID:           "session",
+			Label:        T("Mevcut Oturum"),
+			Subtitle:     T("Son 5 saatlik kullanım"),
 			Percent:      response.FiveHour.Utilization,
 			ResetsInfo:   sessionResets,
 			TimeProgress: sessionTimeProgress,
+			WindowStart:  windowStart(sessionEnd, fiveHourSeconds),
+			ResetsAt:     sessionEnd,
 		},
 		{
-			Label:        "Haftalık Limit",
-			Subtitle:     "Son 7 günlük kullanım",
+			ID:           "weekly",
+			Label:        T("Haftalık Limit"),
+			Subtitle:     T("Son 7 günlük kullanım"),
 			Percent:      response.SevenDay.Utilization,
 			ResetsInfo:   weeklyResets,
 			TimeProgress: weeklyTimeProgress,
+			WindowStart:  windowStart(weeklyEnd, sevenDaySeconds),
+			ResetsAt:     weeklyEnd,
 		},
 	}
 

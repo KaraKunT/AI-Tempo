@@ -41,7 +41,7 @@ func (cursorProvider) Query(ctx context.Context, account config.Account) RateLim
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBufferString("{}"))
 	if err != nil {
-		info.Error = "İstek hatası"
+		info.Error = T("İstek hatası")
 		return info
 	}
 
@@ -57,35 +57,37 @@ func (cursorProvider) Query(ctx context.Context, account config.Account) RateLim
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		info.Error = "API bağlantı hatası"
+		info.Error = T("API bağlantı hatası")
 		return info
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		info.Error = "Yanıt hatası"
+		info.Error = T("Yanıt hatası")
 		return info
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		info.Error = "Session süresi dolmuş"
+		info.Error = T("Session süresi dolmuş")
 		return info
 	}
 
 	var response cursorUsageResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		info.Error = "Veri parse hatası"
+		info.Error = T("Veri parse hatası")
 		return info
 	}
 
 	resetsInfo := ""
 	cycleProgress := -1.0
+	var cycleStart, cycleEnd time.Time
 	endMs, endErr := parseUnixMilliString(response.BillingCycleEnd)
 	if endErr == nil {
 		resetsInfo = formatResetTimeUnixMilli(endMs)
 		if startMs, startErr := parseUnixMilliString(response.BillingCycleStart); startErr == nil && endMs > startMs {
 			windowSeconds := float64(endMs-startMs) / 1000
+			cycleStart, cycleEnd = time.UnixMilli(startMs), time.UnixMilli(endMs)
 			cycleProgress = timeProgress(time.UnixMilli(endMs), windowSeconds)
 		}
 	}
@@ -93,25 +95,34 @@ func (cursorProvider) Query(ctx context.Context, account config.Account) RateLim
 	info.Success = true
 	info.Metrics = []UsageMetric{
 		{
-			Label:        "Toplam Kullanım",
-			Subtitle:     "Fatura dönemi (dahil + bonus)",
+			ID:           "total",
+			Label:        T("Toplam Kullanım"),
+			Subtitle:     T("Fatura dönemi (dahil + bonus)"),
 			Percent:      response.PlanUsage.TotalPercentUsed,
 			ResetsInfo:   resetsInfo,
 			TimeProgress: cycleProgress,
+			WindowStart:  cycleStart,
+			ResetsAt:     cycleEnd,
 		},
 		{
-			Label:        "Otomatik Model",
-			Subtitle:     "Auto model kullanımı",
+			ID:           "auto",
+			Label:        T("Otomatik Model"),
+			Subtitle:     T("Auto model kullanımı"),
 			Percent:      response.PlanUsage.AutoPercentUsed,
 			ResetsInfo:   resetsInfo,
 			TimeProgress: cycleProgress,
+			WindowStart:  cycleStart,
+			ResetsAt:     cycleEnd,
 		},
 		{
-			Label:        "API Kullanımı",
-			Subtitle:     "İsimli model / API kullanımı",
+			ID:           "api",
+			Label:        T("API Kullanımı"),
+			Subtitle:     T("İsimli model / API kullanımı"),
 			Percent:      response.PlanUsage.APIPercentUsed,
 			ResetsInfo:   resetsInfo,
 			TimeProgress: cycleProgress,
+			WindowStart:  cycleStart,
+			ResetsAt:     cycleEnd,
 		},
 	}
 

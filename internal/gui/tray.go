@@ -30,7 +30,7 @@ func newTrayMenu(desk desktop.App, onShow func(tabIndex int), onSettings, onQuit
 
 func (t *trayMenu) rebuild() {
 	items := []*fyne.MenuItem{
-		fyne.NewMenuItem("Pencereyi Göster", func() { t.onShow(-1) }),
+		fyne.NewMenuItem(T("Pencereyi Göster"), func() { t.onShow(-1) }),
 		fyne.NewMenuItemSeparator(),
 	}
 	accounts := config.EnabledAccounts()
@@ -47,14 +47,14 @@ func (t *trayMenu) rebuild() {
 		info, _ := store.Get(acc.ID)
 		switch {
 		case info == nil:
-			items = append(items, fyne.NewMenuItem("    Yükleniyor...", openTab))
+			items = append(items, fyne.NewMenuItem("    "+T("Yükleniyor..."), openTab))
 		case !info.Success:
 			items = append(items, fyne.NewMenuItem("    ❌ "+info.Error, openTab))
 		default:
 			for _, m := range info.Metrics {
 				line := fmt.Sprintf("    %s %s: %.0f%%", severityEmoji(m.Percent), m.Label, m.Percent)
 				if provider.CalcPace(m.Percent, m.TimeProgress) == provider.PaceFast {
-					line += " ⚠ hızlı"
+					line += " ⚠ " + T("hızlı")
 				}
 				if m.ResetsInfo != "" {
 					line += " · ⏳ " + m.ResetsInfo
@@ -62,9 +62,9 @@ func (t *trayMenu) rebuild() {
 				items = append(items, fyne.NewMenuItem(line, openTab))
 			}
 			if rc := info.ResetCredits; rc != nil && rc.Error == "" {
-				line := fmt.Sprintf("    🎟 Sıfırlama hakkı: %d", len(rc.Available))
+				line := fmt.Sprintf("    🎟 %s: %d", T("Sıfırlama hakkı"), len(rc.Available))
 				if len(rc.Available) > 0 {
-					line += " · bitiş " + provider.ShortDateTime(rc.Available[0].ExpiresAt)
+					line += " · " + T("bitiş") + " " + provider.ShortDateTime(rc.Available[0].ExpiresAt)
 				}
 				items = append(items, fyne.NewMenuItem(line, openTab))
 			}
@@ -72,25 +72,25 @@ func (t *trayMenu) rebuild() {
 		items = append(items, fyne.NewMenuItemSeparator())
 	}
 	if len(accounts) == 0 {
-		items = append(items, fyne.NewMenuItem("Henüz hesap yok — Ayarlar'dan ekleyin", t.onSettings), fyne.NewMenuItemSeparator())
+		items = append(items, fyne.NewMenuItem(T("Henüz hesap yok — Ayarlar'dan ekleyin"), t.onSettings), fyne.NewMenuItemSeparator())
 	}
 
 	loading, updated := store.Status()
-	refreshLabel := "Tümünü Yenile"
+	refreshLabel := T("Tümünü Yenile")
 	if loading {
-		refreshLabel = "Yenileniyor..."
+		refreshLabel = T("Yenileniyor...")
 	} else if !updated.IsZero() {
-		refreshLabel = fmt.Sprintf("Tümünü Yenile (son: %s)", updated.Format("15:04"))
+		refreshLabel = Tf("Tümünü Yenile (son: %s)", updated.Format("15:04"))
 	}
 	refreshItem := fyne.NewMenuItem(refreshLabel, func() { store.Refresh(config.EnabledAccounts(), true) })
 	refreshItem.Disabled = loading
 
 	items = append(items,
 		refreshItem,
-		fyne.NewMenuItem("Pencereyi Göster", func() { t.onShow(-1) }),
-		fyne.NewMenuItem("Ayarlar…", t.onSettings),
+		fyne.NewMenuItem(T("Pencereyi Göster"), func() { t.onShow(-1) }),
+		fyne.NewMenuItem(T("Ayarlar…"), t.onSettings),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Çıkış", t.onQuit),
+		fyne.NewMenuItem(T("Çıkış"), t.onQuit),
 	)
 	t.desk.SetSystemTrayMenu(fyne.NewMenu("AI Tempo", items...))
 }

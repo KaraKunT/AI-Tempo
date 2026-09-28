@@ -2,7 +2,6 @@ package gui
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -50,18 +49,18 @@ func resetStateFor(id string) *resetCardState {
 func newResetCreditsCard(account config.Account, rc *provider.ResetCredits) fyne.CanvasObject {
 	st := resetStateFor(account.ID)
 
-	title := canvas.NewText("Kullanım limiti yenileme hakları", nil)
+	title := canvas.NewText(T("Kullanım limiti yenileme hakları"), nil)
 	title.TextSize = 16
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	desc := widget.NewLabel("Bir sıfırlama kullanarak 5 saatlik veya haftalık limitinizi ya da her ikisini yenileyin.")
+	desc := widget.NewLabel(T("Bir sıfırlama kullanarak 5 saatlik veya haftalık limitinizi ya da her ikisini yenileyin."))
 	desc.Wrapping = fyne.TextWrapWord
 
 	body := container.NewVBox()
-	periodLabel := canvas.NewText("Son 30 gün", colorMuted)
+	periodLabel := canvas.NewText(T("Son 30 gün"), colorMuted)
 	periodLabel.TextSize = 12
 
-	availableBtn := widget.NewButton(fmt.Sprintf("Kullanılabilir  %d", len(rc.Available)), nil)
-	historyBtn := widget.NewButton("Geçmiş", nil)
+	availableBtn := widget.NewButton(Tf("Kullanılabilir  %d", len(rc.Available)), nil)
+	historyBtn := widget.NewButton(T("Geçmiş"), nil)
 
 	var refresh func()
 	refresh = func() {
@@ -101,7 +100,7 @@ func newResetCreditsCard(account config.Account, rc *provider.ResetCredits) fyne
 				fyne.Do(func() {
 					st.loading = false
 					if err != nil {
-						st.err = "Geçmiş alınamadı: " + err.Error()
+						st.err = T("Geçmiş alınamadı:") + " " + err.Error()
 					} else {
 						st.history, st.fetchedAt = &h, time.Now()
 					}
@@ -123,14 +122,14 @@ func addAvailableRows(body *fyne.Container, rc *provider.ResetCredits) {
 		return
 	}
 	if len(rc.Available) == 0 {
-		body.Add(mutedRow("Kullanılabilir sıfırlama hakkı yok."))
+		body.Add(mutedRow(T("Kullanılabilir sıfırlama hakkı yok.")))
 		return
 	}
 	for _, c := range rc.Available {
 		body.Add(widget.NewSeparator())
 		name := canvas.NewText(c.Title, nil)
 		name.TextStyle = fyne.TextStyle{Bold: true}
-		expiry := canvas.NewText("Bitiş zamanı "+provider.ShortDateTime(c.ExpiresAt), colorMuted)
+		expiry := canvas.NewText(T("Bitiş zamanı")+" "+provider.ShortDateTime(c.ExpiresAt), colorMuted)
 		expiry.TextSize = 12
 		body.Add(container.NewPadded(container.NewVBox(name, expiry)))
 	}
@@ -138,13 +137,13 @@ func addAvailableRows(body *fyne.Container, rc *provider.ResetCredits) {
 
 func addHistoryRows(body *fyne.Container, h *provider.ResetHistory) {
 	if h == nil || len(h.Events) == 0 {
-		body.Add(mutedRow("Bu dönemde kayıt yok."))
+		body.Add(mutedRow(T("Bu dönemde kayıt yok.")))
 		return
 	}
 	for _, e := range h.Events {
-		label := "Sıfırlama hakkı alındı"
+		label := T("Sıfırlama hakkı alındı")
 		if e.Kind == "used" {
-			label = "Sıfırlama hakkı kullanıldı"
+			label = T("Sıfırlama hakkı kullanıldı")
 		}
 		name := canvas.NewText(label, nil)
 		name.TextStyle = fyne.TextStyle{Bold: true}

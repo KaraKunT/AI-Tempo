@@ -4,10 +4,13 @@ package usage
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
 	"ai-tempo/internal/config"
+	"ai-tempo/internal/history"
+	"ai-tempo/internal/i18n"
 	"ai-tempo/internal/provider"
 )
 
@@ -83,7 +86,14 @@ func (u *Store) ResetFailures(account config.Account) {
 	u.failures[account.ID] = 0
 	delete(u.fetched, account.ID)
 	u.mu.Unlock()
-	u.Refresh([]config.Account{account}, false)
+	u.refresh([]config.Account{account}, false, "Sıfırlama")
+}
+
+// LastFetched, hesabın son sorgulandığı zamanı döndürür (hiç sorgulanmadıysa sıfır).
+func (u *Store) LastFetched(id string) time.Time {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.fetched[id]
 }
 
 // Forget, silinen/değiştirilen bir hesabın önbelleğini temizler.
@@ -111,6 +121,14 @@ func (u *Store) Start() {
 // force=true ise (elle yenileme) son 30 sn'de sorgulanmamış olanlar sorgulanır.
 // Sorguya alınan hesap sayısını döndürür.
 func (u *Store) Refresh(accounts []config.Account, force bool) int {
+	trigger := "Otomatik"
+	if force {
+		trigger = "Elle"
+	}
+	return u.refresh(accounts, force, trigger)
+}
+
+func (u *Store) refresh(accounts []config.Account, force bool, trigger string) int {
 	now := time.Now()
 	interval := time.Duration(config.Current.RefreshMinutes) * time.Minute
 
@@ -148,8 +166,18 @@ func (u *Store) Refresh(accounts []config.Account, force bool) int {
 				time.Sleep(requestSpacing)
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			start := time.Now()
 			info := provider.Get(a.Provider).Query(ctx, a)
 			cancel()
+			history.Add(a.ID, history.Entry{
+				At: start, Success: info.Success, Trigger: trigger,
+				Message: logMessage(info), Duration: time.Since(start),
+			})
+			if info.Success {
+				for _, m := range info.Metrics {
+					history.AddSample(a.ID, m.ID, start, m.Percent)
+				}
+			}
 
 			u.mu.Lock()
 			u.results[a.ID] = &info
@@ -166,4 +194,16 @@ func (u *Store) Refresh(accounts []config.Account, force bool) int {
 		}
 	}()
 	return len(due)
+}
+
+// logMessage, geçmişe yazılacak kısa açıklamayı oluşturur: hata mesajı veya kota özeti.
+func logMessage(info provider.RateLimitInfo) string {
+	if !info.Success {
+		return info.Error
+	}
+	var parts []string
+	for _, m := range info.Metrics {
+		parts = append(parts, i18n.Tf("%s %%%.0f", m.Label, m.Percent))
+	}
+	return strings.Join(parts, " · ")
 }

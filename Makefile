@@ -5,7 +5,7 @@ APP_ID       := com.karakunt.ai-tempo
 GOBIN        := $(shell go env GOPATH)/bin
 FYNE         := $(GOBIN)/fyne
 
-.PHONY: help build run clean tidy fmt package login-add login-remove
+.PHONY: help build run clean tidy fmt package release login-add login-remove
 
 ## help: Kullanılabilir komutları listeler (varsayılan hedef)
 help:
@@ -23,7 +23,7 @@ run: build
 ## clean: Derleme çıktılarını temizler
 clean:
 	rm -f $(APP_NAME)
-	rm -rf "$(APP_BUNDLE)"
+	rm -rf "$(APP_BUNDLE)" dist
 
 ## tidy: go.mod / go.sum dosyalarını günceller
 tidy:
@@ -44,6 +44,17 @@ package: $(FYNE)
 	@echo ""
 	@echo "✓ $(APP_BUNDLE) hazır. İlk açılışta Gatekeeper uyarısı çıkarsa"
 	@echo "  Finder'da uygulamaya sağ tıklayıp 'Aç' deyin."
+
+## release: Dağıtım için Intel + Apple Silicon (universal) .app üretir ve
+## dist/AI-Tempo-macOS.zip olarak paketler (GitHub Releases'e yüklenecek dosya).
+release: package
+	CGO_ENABLED=1 GOARCH=amd64 go build -o dist/$(APP_NAME)-amd64 ./cmd/ai-tempo
+	CGO_ENABLED=1 GOARCH=arm64 go build -o dist/$(APP_NAME)-arm64 ./cmd/ai-tempo
+	lipo -create -output "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)" dist/$(APP_NAME)-amd64 dist/$(APP_NAME)-arm64
+	rm -f dist/$(APP_NAME)-amd64 dist/$(APP_NAME)-arm64
+	codesign --force --deep -s - "$(APP_BUNDLE)"
+	ditto -c -k --keepParent "$(APP_BUNDLE)" dist/AI-Tempo-macOS.zip
+	@echo "✓ dist/AI-Tempo-macOS.zip hazır ($$(lipo -archs "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"))"
 
 ## login-add: .app'i oturum açılışında otomatik başlatılacak şekilde ekler
 login-add:

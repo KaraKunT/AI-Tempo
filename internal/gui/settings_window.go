@@ -12,6 +12,8 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"ai-tempo/internal/config"
+	"ai-tempo/internal/history"
+	"ai-tempo/internal/i18n"
 	"ai-tempo/internal/provider"
 )
 
@@ -40,19 +42,19 @@ var providerHelp = map[string]struct{ key, org string }{
 var consoleSnippets = map[string]struct{ site, code string }{
 	"chatgpt": {"chatgpt.com", `fetch('/api/auth/session').then(r => r.json()).then(s => {
   const id = s.account?.id || JSON.parse(atob(s.accessToken.split('.')[1]))['https://api.openai.com/auth'].chatgpt_account_id;
-  console.log('TOKEN:\n' + s.accessToken + '\n\nACCOUNT ID:\n' + id + '\n\nBitiş: ' + new Date(s.expires).toLocaleString());
+  console.log('TOKEN:\n' + s.accessToken + '\n\nACCOUNT ID:\n' + id + '\n\nExpires: ' + new Date(s.expires).toLocaleString());
   copy(s.accessToken);
 });`},
 	"claude": {"claude.ai", `fetch('/api/organizations').then(r => r.json()).then(orgs => {
   orgs.forEach(o => console.log('ORGANIZATION ID (' + o.name + '):\n' + o.uuid));
   const m = document.cookie.match(/(?:^|; )sessionKeyV3=([^;]+)/);
   if (m) { console.log('SESSION KEY:\n' + m[1]); copy(m[1]); }
-  else console.log('sessionKeyV3 HttpOnly; Application → Cookies → claude.ai içinden kopyalayın.');
+  else console.log('sessionKeyV3 is HttpOnly; copy it from Application → Cookies → claude.ai');
 });`},
 	"cursor": {"cursor.com", `(() => {
   const m = document.cookie.match(/(?:^|; )WorkosCursorSessionToken=([^;]+)/);
   if (m) { const t = decodeURIComponent(m[1]); console.log('TOKEN:\n' + t); copy(t); }
-  else console.log('WorkosCursorSessionToken HttpOnly; Application → Cookies → cursor.com içinden kopyalayın.');
+  else console.log('WorkosCursorSessionToken is HttpOnly; copy it from Application → Cookies → cursor.com');
 })();`},
 }
 
@@ -66,16 +68,16 @@ func showConsoleSnippet(parent fyne.Window, providerID string) {
 	code.SetText(sn.code)
 	code.Wrapping = fyne.TextWrapBreak
 	code.SetMinRowsVisible(7)
-	copyBtn := widget.NewButtonWithIcon("Panoya Kopyala", theme.ContentCopyIcon(), func() {
+	copyBtn := widget.NewButtonWithIcon(T("Panoya Kopyala"), theme.ContentCopyIcon(), func() {
 		fyne.CurrentApp().Clipboard().SetContent(sn.code)
 	})
 	copyBtn.Importance = widget.HighImportance
 	content := container.NewVBox(
-		hintText(sn.site+" açıkken Geliştirici Araçları → Console sekmesine yapıştırıp Enter'a basın. Değerler tam olarak yazılır, anahtar okunabiliyorsa panoya da kopyalanır."),
+		hintText(Tf("%s açıkken Geliştirici Araçları → Console sekmesine yapıştırıp Enter'a basın. Değerler tam olarak yazılır, anahtar okunabiliyorsa panoya da kopyalanır.", sn.site)),
 		code,
 		container.NewCenter(copyBtn),
 	)
-	d := dialog.NewCustom(provider.Get(providerID).DisplayName()+" Konsol Kodu", "Kapat", content, parent)
+	d := dialog.NewCustom(provider.Get(providerID).DisplayName()+" "+T("Konsol Kodu"), T("Kapat"), content, parent)
 	d.Resize(fyne.NewSize(560, 400))
 	d.Show()
 }
@@ -91,7 +93,7 @@ func showSettings(app fyne.App, onChanged func()) {
 		settingsWindow.RequestFocus()
 		return
 	}
-	w := app.NewWindow("Ayarlar")
+	w := app.NewWindow(T("Ayarlar"))
 	settingsWindow = w
 	w.SetOnClosed(func() { settingsWindow = nil })
 	w.Resize(fyne.NewSize(560, 560))
@@ -101,7 +103,7 @@ func showSettings(app fyne.App, onChanged func()) {
 
 	save := func() {
 		if err := config.Current.Save(); err != nil {
-			dialog.ShowError(fmt.Errorf("Ayarlar kaydedilemedi: %w", err), w)
+			dialog.ShowError(fmt.Errorf("%s: %w", T("Ayarlar kaydedilemedi"), err), w)
 			return
 		}
 		onChanged()
@@ -111,7 +113,7 @@ func showSettings(app fyne.App, onChanged func()) {
 	rebuild = func() {
 		accountList.RemoveAll()
 		if len(config.Current.Accounts) == 0 {
-			empty := canvas.NewText("Henüz hesap yok.", colorMuted)
+			empty := canvas.NewText(T("Henüz hesap yok."), colorMuted)
 			accountList.Add(container.NewPadded(empty))
 		}
 		for i := range config.Current.Accounts {
@@ -123,12 +125,12 @@ func showSettings(app fyne.App, onChanged func()) {
 			name.TextStyle = fyne.TextStyle{Bold: true}
 			detail := provider.Get(acc.Provider).DisplayName()
 			if acc.SessionKey == "" {
-				detail += " · ⚠ anahtar yok"
+				detail += " · ⚠ " + T("anahtar yok")
 			}
 			sub := canvas.NewText(detail, colorMuted)
 			sub.TextSize = 11
 
-			enabled := widget.NewCheck("Etkin", func(on bool) {
+			enabled := widget.NewCheck(T("Etkin"), func(on bool) {
 				if config.Current.Accounts[idx].Enabled == on {
 					return
 				}
@@ -141,7 +143,7 @@ func showSettings(app fyne.App, onChanged func()) {
 				showAccountEditor(w, &config.Current.Accounts[idx], func(updated config.Account, newKey string) {
 					if newKey != "" {
 						if err := config.KeychainSet(updated.ID, newKey); err != nil {
-							dialog.ShowError(fmt.Errorf("Anahtar Keychain'e kaydedilemedi: %w", err), w)
+							dialog.ShowError(fmt.Errorf("%s: %w", T("Anahtar Keychain'e kaydedilemedi"), err), w)
 							return
 						}
 						updated.SessionKey = newKey
@@ -154,11 +156,12 @@ func showSettings(app fyne.App, onChanged func()) {
 			edit.Importance = widget.LowImportance
 
 			del := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
-				dialog.ShowConfirm("Hesabı sil", fmt.Sprintf("“%s” silinsin mi? Anahtarı da Keychain'den kaldırılır.", acc.Name), func(ok bool) {
+				dialog.ShowConfirm(T("Hesabı sil"), Tf("“%s” silinsin mi? Anahtarı da Keychain'den kaldırılır.", acc.Name), func(ok bool) {
 					if !ok {
 						return
 					}
 					config.KeychainDelete(acc.ID)
+					history.Delete(acc.ID)
 					store.Forget(acc.ID)
 					config.Current.Accounts = append(config.Current.Accounts[:idx], config.Current.Accounts[idx+1:]...)
 					save()
@@ -176,11 +179,11 @@ func showSettings(app fyne.App, onChanged func()) {
 	}
 	rebuild()
 
-	addBtn := widget.NewButtonWithIcon("Hesap Ekle", theme.ContentAddIcon(), func() {
+	addBtn := widget.NewButtonWithIcon(T("Hesap Ekle"), theme.ContentAddIcon(), func() {
 		showAccountEditor(w, nil, func(acc config.Account, newKey string) {
 			acc.ID = config.NewAccountID()
 			if err := config.KeychainSet(acc.ID, newKey); err != nil {
-				dialog.ShowError(fmt.Errorf("Anahtar Keychain'e kaydedilemedi: %w", err), w)
+				dialog.ShowError(fmt.Errorf("%s: %w", T("Anahtar Keychain'e kaydedilemedi"), err), w)
 				return
 			}
 			acc.SessionKey = newKey
@@ -204,14 +207,61 @@ func showSettings(app fyne.App, onChanged func()) {
 	})
 	refreshSelect.SetSelected(refreshLabel(config.Current.RefreshMinutes))
 
+	langNames := make([]string, len(i18n.Languages))
+	for i, l := range i18n.Languages {
+		langNames[i] = l.Name
+	}
+	langSelect := widget.NewSelect(langNames, nil)
+	for _, l := range i18n.Languages {
+		if l.Code == i18n.Lang() {
+			langSelect.SetSelected(l.Name)
+		}
+	}
+	langSelect.OnChanged = func(sel string) {
+		for _, l := range i18n.Languages {
+			if l.Name == sel && l.Code != i18n.Lang() {
+				i18n.Set(l.Code)
+				config.Current.Language = l.Code
+				// Sonuçlardaki metinler (gösterge adları, hatalar) yeni dilde gelsin diye yeniden sorgulanır.
+				for _, a := range config.Current.Accounts {
+					store.Forget(a.ID)
+				}
+				save()
+				// Pencere yeni dille yeniden açılır.
+				w.Close()
+				showSettings(app, onChanged)
+			}
+		}
+	}
+
+	historyOptions := []int{2, 7, 14, 35, 60, 90}
+	historyLabels := make([]string, len(historyOptions))
+	for i, d := range historyOptions {
+		historyLabels[i] = Tf("%d gün", d)
+	}
+	historySelect := widget.NewSelect(historyLabels, func(sel string) {
+		for i, l := range historyLabels {
+			if l == sel && config.Current.HistoryDays != historyOptions[i] {
+				config.Current.HistoryDays = historyOptions[i]
+				history.SetRetention(historyOptions[i])
+				save()
+			}
+		}
+	})
+	historySelect.SetSelected(Tf("%d gün", config.Current.HistoryDays))
+
 	general := newRoundedCard(container.NewVBox(
-		sectionTitle("Genel"),
-		widget.NewForm(widget.NewFormItem("Otomatik yenileme", refreshSelect)),
-		hintText("Her hesap bu aralıkla, sırayla sorgulanır. Üst üste 5 kez hata alan hesap otomatik sorgulanmaz; sayacı hesabın sekmesinden sıfırlayabilirsiniz."),
+		sectionTitle(T("Genel")),
+		widget.NewForm(
+			widget.NewFormItem(T("Dil"), langSelect),
+			widget.NewFormItem(T("Otomatik yenileme"), refreshSelect),
+			widget.NewFormItem(T("Geçmişi sakla"), historySelect),
+		),
+		hintText(T("Her hesap bu aralıkla, sırayla sorgulanır. Üst üste 5 kez hata alan hesap otomatik sorgulanmaz; sayacı hesabın sekmesinden sıfırlayabilirsiniz. Sorgu geçmişi ve grafik verisi seçilen süre kadar saklanır; aylık dönemler için en az 35 gün önerilir.")),
 	))
 
-	accountsHeader := container.NewBorder(nil, nil, sectionTitle("Hesaplar"), addBtn)
-	footer := hintText("🔒 Oturum anahtarları diske yazılmaz, macOS Anahtar Zinciri'nde (Keychain) saklanır.")
+	accountsHeader := container.NewBorder(nil, nil, sectionTitle(T("Hesaplar")), addBtn)
+	footer := hintText("🔒 " + T("Oturum anahtarları diske yazılmaz, macOS Anahtar Zinciri'nde (Keychain) saklanır."))
 
 	content := container.NewVBox(
 		general,
@@ -221,6 +271,7 @@ func showSettings(app fyne.App, onChanged func()) {
 	)
 	w.SetContent(container.NewScroll(container.NewPadded(content)))
 	w.Show()
+	rememberWindowFrame(w, "AITempoSettingsWindow")
 	activateApp()
 }
 
@@ -240,14 +291,14 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 	}
 
 	nameEntry := widget.NewEntry()
-	nameEntry.SetPlaceHolder("örn. e-posta adresiniz")
+	nameEntry.SetPlaceHolder(T("örn. e-posta adresiniz"))
 	nameEntry.SetText(acc.Name)
 
 	keyEntry := widget.NewPasswordEntry()
 	if existing != nil && existing.SessionKey != "" {
-		keyEntry.SetPlaceHolder("Değiştirmek için yeni anahtar girin")
+		keyEntry.SetPlaceHolder(T("Değiştirmek için yeni anahtar girin"))
 	} else {
-		keyEntry.SetPlaceHolder("Oturum anahtarı / token")
+		keyEntry.SetPlaceHolder(T("Oturum anahtarı / token"))
 	}
 
 	orgEntry := widget.NewEntry()
@@ -259,14 +310,14 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 	orgHelp.Wrapping = fyne.TextWrapWord
 
 	// Gelişmiş: sağlayıcıya özel ek seçenekler (şimdilik yalnızca ChatGPT).
-	resetCreditsCheck := widget.NewCheck("Codex sıfırlama haklarını göster", nil)
+	resetCreditsCheck := widget.NewCheck(T("Codex sıfırlama haklarını göster"), nil)
 	resetCreditsCheck.SetChecked(acc.ShowResetCredits)
-	advanced := widget.NewAccordion(widget.NewAccordionItem("Gelişmiş", container.NewVBox(
+	advanced := widget.NewAccordion(widget.NewAccordionItem(T("Gelişmiş"), container.NewVBox(
 		resetCreditsCheck,
-		hintText("Kullanılabilir ücretsiz limit sıfırlama hakkı sayısını ve son kullanma tarihini gösterir. Her yenilemede ek bir istek yapar."),
+		hintText(T("Kullanılabilir ücretsiz limit sıfırlama hakkı sayısını ve son kullanma tarihini gösterir. Her yenilemede ek bir istek yapar.")),
 	)))
 
-	snippetBtn := widget.NewButtonWithIcon("Konsoldan al", theme.ContentCopyIcon(), func() {
+	snippetBtn := widget.NewButtonWithIcon(T("Konsoldan al"), theme.ContentCopyIcon(), func() {
 		showConsoleSnippet(parent, acc.Provider)
 	})
 	snippetBtn.Importance = widget.LowImportance
@@ -279,8 +330,8 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 			}
 		}
 		h := providerHelp[acc.Provider]
-		keyHelp.SetText(h.key)
-		orgHelp.SetText(h.org)
+		keyHelp.SetText(T(h.key))
+		orgHelp.SetText(T(h.org))
 		if acc.Provider == "cursor" {
 			orgEntry.Disable()
 		} else {
@@ -294,23 +345,23 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 	}
 	providerSelect.SetSelected(provider.Get(acc.Provider).DisplayName())
 
-	enabledCheck := widget.NewCheck("Menüde ve pencerede göster", nil)
+	enabledCheck := widget.NewCheck(T("Menüde ve pencerede göster"), nil)
 	enabledCheck.SetChecked(acc.Enabled)
 
 	form := widget.NewForm(
-		widget.NewFormItem("Sağlayıcı", providerSelect),
-		widget.NewFormItem("İsim", nameEntry),
-		widget.NewFormItem("Oturum anahtarı", container.NewVBox(keyEntry, keyHelp, container.NewHBox(snippetBtn))),
+		widget.NewFormItem(T("Sağlayıcı"), providerSelect),
+		widget.NewFormItem(T("İsim"), nameEntry),
+		widget.NewFormItem(T("Oturum anahtarı"), container.NewVBox(keyEntry, keyHelp, container.NewHBox(snippetBtn))),
 		widget.NewFormItem("Organization ID", container.NewVBox(orgEntry, orgHelp)),
 		widget.NewFormItem("", enabledCheck),
 	)
 	editor := container.NewVBox(form, advanced)
 
-	title := "Hesap Ekle"
+	title := T("Hesap Ekle")
 	if existing != nil {
-		title = "Hesabı Düzenle"
+		title = T("Hesabı Düzenle")
 	}
-	d := dialog.NewCustomConfirm(title, "Kaydet", "Vazgeç", container.NewPadded(editor), func(ok bool) {
+	d := dialog.NewCustomConfirm(title, T("Kaydet"), T("Vazgeç"), container.NewPadded(editor), func(ok bool) {
 		if !ok {
 			return
 		}
@@ -326,16 +377,16 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 
 		var problems []string
 		if acc.Name == "" {
-			problems = append(problems, "İsim boş olamaz.")
+			problems = append(problems, T("İsim boş olamaz."))
 		}
 		if key == "" && (existing == nil || existing.SessionKey == "") {
-			problems = append(problems, "Oturum anahtarı gerekli.")
+			problems = append(problems, T("Oturum anahtarı gerekli."))
 		}
 		if acc.Provider == "claude" && acc.OrganizationID == "" {
-			problems = append(problems, "Claude için Organization ID gerekli.")
+			problems = append(problems, T("Claude için Organization ID gerekli."))
 		}
 		if len(problems) > 0 {
-			dialog.ShowInformation("Eksik bilgi", strings.Join(problems, "\n"), parent)
+			dialog.ShowInformation(T("Eksik bilgi"), strings.Join(problems, "\n"), parent)
 			return
 		}
 		onSave(acc, key)
@@ -347,9 +398,9 @@ func showAccountEditor(parent fyne.Window, existing *config.Account, onSave func
 // refreshLabel, yenileme aralığını okunur hale getirir (60 ve katları saat olarak).
 func refreshLabel(minutes int) string {
 	if minutes >= 60 && minutes%60 == 0 {
-		return fmt.Sprintf("%d saat", minutes/60)
+		return Tf("%d saat", minutes/60)
 	}
-	return fmt.Sprintf("%d dakika", minutes)
+	return Tf("%d dakika", minutes)
 }
 
 func sectionTitle(text string) fyne.CanvasObject {

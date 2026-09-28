@@ -1,203 +1,150 @@
 # AI Tempo
 
-Claude.ai, Cursor ve ChatGPT hesaplarınızın kota/kullanım limitlerini tek bir
-macOS masaüstü uygulamasından takip edin. Her hesap kendi sekmesinde, marka
-renginde bir ikonla görünür; her kota kartında **kullanım yüzdesi**,
-**sıfırlanmaya kalan süre** ve **tempo** gösterilir.
+**English** · [Türkçe](README.tr.md)
 
-### Tempo nasıl okunur?
+A macOS menu bar app that tracks the usage limits of your **Claude.ai**,
+**Cursor** and **ChatGPT** accounts in one place. Each account gets its own
+tab. Each quota card shows **usage percentage**, **time until reset** and
+**pace**: whether you are on track to run out before the period ends.
 
-Kullanım çubuğunun üzerindeki **mor dikey çizgi**, dönemin ne kadarının
-geçtiğini gösterir ("şu ana kadar harcamış olmanız gereken" nokta).
+The interface is available in **English** (default) and **Turkish**
+(Settings → Language).
 
-- Doluluk çizginin **gerisindeyse** → `Tempo: rahat` (kota süreden önce bitmez)
-- Çizgiye **yakınsa** (±10 puan) → `Tempo: normal`
-- Çizgiyi **geçmişse** → `Tempo: hızlı ⚠` (bu hızla kota erken biter;
-  menü çubuğunda da `⚠ hızlı` olarak görünür)
+> ⚠️ AI Tempo does **not** use official APIs. It calls the same internal
+> endpoints that claude.ai, cursor.com and chatgpt.com use in your browser.
+> These can change without notice, and session keys/tokens have to be
+> refreshed when they expire. Use it only for your own accounts.
 
-> ⚠️ Bu araç, ilgili servislerin **resmi API'lerini değil**, web
-> arayüzlerinin (claude.ai, cursor.com, chatgpt.com) tarayıcıdan giriş
-> yaptığınızda kullandığı dahili (public olmayan) uç noktaları kullanır.
-> Bu yüzden zaman zaman servisler tarafında değişebilir ve oturum
-> anahtarlarının/token'ların süresi dolduğunda yeniden alınması gerekir.
-> Sadece kendi hesaplarınız için, kişisel kullanım amacıyla kullanın.
+## Download
 
-## Kurulum
+1. Download **`AI-Tempo-macOS.zip`** from the
+   [latest release](https://github.com/KaraKunT/AI-Tempo/releases/latest).
+   It runs on both Apple Silicon and Intel Macs.
+2. Unzip it and move **AI Tempo.app** to your Applications folder.
+3. The app is not notarized by Apple, so macOS blocks it the first time you
+   open it. Either:
+   - open **System Settings → Privacy & Security** and click
+     **Open Anyway** next to the AI Tempo message, or
+   - run this once in Terminal:
+     ```bash
+     xattr -dr com.apple.quarantine "/Applications/AI Tempo.app"
+     ```
+
+AI Tempo runs in the menu bar only. It does not appear in the Dock or in
+Cmd+Tab.
+
+## Features
+
+- **Menu bar summary.** Every quota with 🟢/🟠/🔴 status, percentage and time
+  until reset. Click an account to open its tab.
+- **Pace.** The purple marker on each usage bar shows how much of the period
+  has passed.
+  - `Pace: relaxed`: usage is behind the marker.
+  - `Pace: normal`: usage is within ±10 points of it.
+  - `Pace: fast ⚠`: usage is ahead of it and you may run out early.
+- **Period chart.** Usage from the start of the period until reset, drawn
+  against an "ideal pace" line. Filter by Period / Today / Yesterday / Week /
+  Month.
+- **Query history.** Every query with time, trigger (Auto / Manual / Reset),
+  result and duration. Filter by Today / Yesterday / Week / Month.
+- **Status in tab titles.** `⟳` means the account is being queried, `⚠` means
+  its last query failed.
+- **Retry limit.** After 5 consecutive errors an account is no longer queried
+  automatically. **Reset Counter** on its tab re-enables it.
+- **Codex limit resets** (ChatGPT, optional). Shows available free resets and
+  the history of granted and used resets.
+- The main and Settings windows reopen where you left them.
+
+## Adding accounts
+
+Open **Settings** from the menu bar or the window, then click **Add Account**.
+Each provider needs a session key (and sometimes an ID) copied from your
+browser while you are signed in.
+
+The account editor has a **Get from console** button. It gives you a snippet
+to paste into the browser's Developer Tools console, which prints the values
+in full. Values copied from the Network tab can be silently truncated with
+`…`, and a truncated key shows up as "expired".
+
+| Provider | Session key | Organization ID |
+|---|---|---|
+| **Claude** | `sessionKeyV3` cookie. Developer Tools → **Application → Cookies → claude.ai** | Run the console snippet on claude.ai, or copy the UUID between `/organizations/` and `/usage` in the `…/usage` request URL |
+| **Cursor** | `WorkosCursorSessionToken` cookie. **Application → Cookies → cursor.com** (`%3A%3A` is converted to `::` automatically) | Not needed |
+| **ChatGPT** | Run the console snippet on chatgpt.com (it copies the token to your clipboard), or copy the `Bearer` token from the `backend-api/wham/usage` request | `chatgpt-account-id` header of the same request (the snippet prints it) |
+
+Claude and Cursor mark their cookies HttpOnly, so JavaScript usually can't
+read them. For those two, copy the key from the **Application → Cookies**
+panel.
+
+When a key expires, repeat the steps and paste the new key in **Settings →
+account → Edit**. If you leave the field empty, the existing key is kept.
+
+## Settings
+
+| Setting | Options |
+|---|---|
+| Language | English (default), Türkçe |
+| Auto refresh | 5, 10, 15, 30 minutes · 1, 2, 4, 8, 16, 24 hours |
+| Keep history | 2, 7, 14, 35 (default), 60, 90 days. Use at least 35 days to cover monthly periods such as Cursor's |
+
+### Where data is stored
+
+| What | Where |
+|---|---|
+| Accounts, IDs, settings | `~/Library/Application Support/ai-tempo/settings.json` |
+| Session keys / tokens | macOS **Keychain**, service `ai-tempo`. Never written to disk in plain text |
+| Query history and chart data | `~/Library/Application Support/ai-tempo/history.db` (SQLite) |
+
+Everything stays on your Mac. AI Tempo only talks to claude.ai, cursor.com
+and chatgpt.com.
+
+## Request policy
+
+All queries go through a single scheduler (`internal/usage`), so the window
+and the menu bar share results:
+
+- Each account is queried **once** per refresh interval. This is fewer
+  requests than an open dashboard tab in a browser makes.
+- Accounts are queried **one at a time**, 1.5 s apart.
+- A manual refresh of a healthy account runs at most once every 30 s. A
+  failed account can be retried right away.
+- Claude sits behind Cloudflare, which occasionally blocks non-browser
+  requests with HTTP 403. AI Tempo reports this as "Blocked by Cloudflare"
+  (not as an expired session) and retries once on a fresh connection.
+
+## Building from source
+
+Requires Go and Xcode Command Line Tools.
 
 ```bash
-make build     # sadece derler -> ./ai-tempo
-make run       # derler ve terminalden çalıştırır
-make package   # "AI Tempo.app" bundle'ı üretir (Icon.png logosuyla)
-open "AI Tempo.app"
+make run       # build and run from the terminal
+make package   # build "AI Tempo.app"
+make release   # universal (Intel + Apple Silicon) app → dist/AI-Tempo-macOS.zip
 ```
 
-`.app` **Dock'ta ve Cmd+Tab'da görünmez**; yalnızca menü çubuğunda çalışır.
-Bunun için hem `Info.plist`'e `LSUIElement` eklenir hem de açılıştan sonra
-kodda etkinleştirme politikası "Accessory" yapılır (`internal/gui/dock_darwin.go`), çünkü
-GLFW açılışta uygulamayı normal Dock uygulamasına çeviriyor. `Icon.png` Finder'da ve Cmd+Tab'da uygulama simgesi olarak
-kullanılır. Dock'ta görünmesini isterseniz Makefile'daki `LSUIElement`
-satırını kaldırıp `make package` çalıştırın. İmzasız (ad-hoc) olduğu için
-ilk açılışta Gatekeeper uyarısı çıkarsa Finder'da sağ tık → **Aç** deyin.
-
-### Açılışta Otomatik Başlatma
+Start at login:
 
 ```bash
-make login-add      # oturum açılışına ekler
-make login-remove   # kaldırır
+make login-add      # adds the .app in this folder to login items
+make login-remove
 ```
 
-Öğe, proje klasöründeki `.app`'i gösterir; klasörü taşırsanız
-`make login-remove && make login-add` ile yeniden ekleyin. Sistem Ayarları →
-Genel → Giriş Öğeleri'nden de görülebilir/kaldırılabilir.
-
-## Menü Çubuğu (Saatin Yanı)
-
-Uygulama açıldığında menü çubuğuna bir gösterge ikonu eklenir. İkona
-tıklayınca açılan menüde:
-
-- Her hesap için başlık satırı (tıklanınca pencere o hesabın sekmesinde açılır)
-- Altında her kotanın durumu: 🟢/🟠/🔴 yüzde ve sıfırlanmaya kalan süre
-- **Tümünü Yenile** (son yenileme saatiyle) — menü ayrıca her 5 dakikada bir
-  kendiliğinden yenilenir (Ayarlar → Otomatik yenileme)
-- **Pencereyi Göster**, **Ayarlar…** ve **Çıkış**
-
-**Ayarlar…** hesap yönetimi penceresini açar (bkz. aşağıda).
-
-Pencerenin kapatma (✕) düğmesi uygulamayı kapatmaz, sadece gizler. Tamamen
-çıkmak için menüdeki **Çıkış**'ı kullanın (veya Cmd+Q).
-
-## Ayarlar ve Hesaplar
-
-Hesaplar uygulama içinden yönetilir: menü çubuğunda **Ayarlar…** veya
-penceredeki **⚙ Ayarlar** düğmesi. Buradan:
-
-- Hesap **ekleyebilir, düzenleyebilir, silebilir**, etkin/pasif yapabilirsiniz
-- Süresi dolan anahtarı **Düzenle** → yeni anahtarı yapıştırarak yenilersiniz
-  (alan boş bırakılırsa mevcut anahtar korunur)
-- **Otomatik yenileme** aralığını seçersiniz (5 / 10 / 15 / 30 / 60 dk)
-- Hesap düzenleyicideki **Gelişmiş** bölümünden sağlayıcıya özel seçenekleri
-  açarsınız. ChatGPT için: **Codex sıfırlama haklarını göster**. Açıkken
-  ChatGPT sekmesinde "Kullanım limiti yenileme hakları" kartı görünür:
-  - **Kullanılabilir**: kullanılabilir haklar ve bitiş zamanları
-    (`backend-api/wham/rate-limit-reset-credits`; her yenilemede ek bir istek).
-  - **Geçmiş**: son 30 günde alınan/kullanılan haklar
-    (`…/rate-limit-reset-credits/history`). Geçmiş otomatik yenilemede
-    çekilmez; yalnızca bu sekme açılınca sorgulanır ve 10 dk bellekte tutulur.
-
-**Nerede saklanır?**
-
-| Ne | Nerede |
-|---|---|
-| Hesap listesi, isimler, org ID, ayarlar | `~/Library/Application Support/ai-tempo/settings.json` |
-| Oturum anahtarları / token'lar | macOS **Anahtar Zinciri** (Keychain), servis adı `ai-tempo` |
-
-Anahtarlar hiçbir zaman diske düz metin olarak yazılmaz.
-
-**Eski addan geçiş:** Uygulamanın eski adı "AI Kota Sorgulama" idi. İlk
-açılışta eski ayar klasörü (`ai-kota-sorgulama`) ve Keychain kayıtları
-otomatik olarak yeni ada (`ai-tempo`) taşınır, eskileri silinir.
-
-**Eski `config.json`'dan geçiş:** `settings.json` yoksa uygulama ilk açılışta
-eski `config.json`'u (proje klasörü, binary'nin yanı veya
-`~/.config/ai-kota-sorgulama/`) bulup hesapları otomatik içe aktarır ve
-anahtarları Keychain'e taşır. İçe aktarımdan sonra `config.json` artık
-kullanılmaz; anahtarlar düz metin durmasın diye **silmeniz önerilir**.
-
-## Sorgu Sıklığı ve Engellenme Riski
-
-Tüm sorgular tek bir yerden (`internal/usage`) yapılır; pencere ve menü çubuğu aynı
-sonuçları paylaşır:
-
-- Her hesap, seçilen aralıkta (varsayılan 5 dk) **bir kez** sorgulanır —
-  tarayıcıda açık duran bir dashboard sekmesinden daha az istek demektir.
-- Hesaplar **sırayla**, aralarında 1,5 sn bekleyerek sorgulanır (aynı anda
-  istek yağdırılmaz).
-- Hata alan hesabın aralığı her hatada **ikiye katlanır** (en fazla 16×);
-  süresi dolmuş bir anahtar servise sürekli istek atmaz.
-- Elle yenileme aynı hesap için 30 sn'de bir kez çalışır.
-
-## Key / Token Nasıl Alınır
-
-Üç servis de kendi web sitenizde oturum açmışken tarayıcının **Geliştirici
-Araçları → Network** sekmesinden alınır. Genel adımlar:
-
-1. İlgili siteye tarayıcıdan giriş yapın.
-2. `F12` (veya Cmd+Opt+I) ile Geliştirici Araçları'nı açın, **Network**
-   sekmesine geçin, **XHR/Fetch** filtresini seçin.
-3. Aşağıda tarif edilen sayfayı ziyaret edin / yenileyin.
-4. İlgili isteği bulup **Copy → Copy as cURL** ile kopyalayın, oradan
-   gereken cookie/header değerini alın.
-
-Oturum süresi dolduğunda (uygulama "Session süresi dolmuş" / "Token süresi
-dolmuş" hatası verirse) aynı adımları tekrarlayıp **Ayarlar → hesap →
-Düzenle** ile yeni anahtarı girin. Aşağıdaki "→ `session_key`" /
-"→ `organization_id`" ifadeleri, Ayarlar'daki **Oturum anahtarı** ve
-**Organization ID** alanlarına karşılık gelir.
-
-### Claude (`provider: "claude"`)
-
-1. [claude.ai](https://claude.ai) adresine giriş yapın.
-2. Herhangi bir sohbet sayfasındayken Network sekmesini açın, bir mesaj
-   gönderin veya sayfayı yenileyin.
-3. `usage` içeren bir istek arayın:
-   `GET https://claude.ai/api/organizations/<ORG_ID>/usage`
-4. **Cookie** başlığından `sessionKeyV3` değerini kopyalayın →
-   `session_key` alanına yazın.
-5. İsteğin URL'sindeki `/organizations/` ile `/usage` arasındaki UUID →
-   `organization_id` alanına yazın.
-
-### Cursor (`provider: "cursor"`)
-
-1. [cursor.com/dashboard/spending](https://cursor.com/dashboard/spending)
-   sayfasına gidin.
-2. Network sekmesinde şu isteği bulun:
-   `POST https://cursor.com/api/dashboard/get-current-period-usage`
-3. **Cookie** başlığından `WorkosCursorSessionToken` değerini kopyalayın
-   (URL-encode edilmiş `%3A%3A` kısmını `::` olarak decode edin) →
-   `session_key` alanına yazın.
-4. Cursor için `organization_id` gerekmez, boş bırakabilir veya alanı hiç
-   eklemeyebilirsiniz.
-
-### ChatGPT (`provider: "chatgpt"`)
-
-1. [chatgpt.com](https://chatgpt.com) adresinde bir sohbet açın (herhangi
-   bir sayfa yeterli).
-2. Network sekmesinde şu isteği bulun:
-   `GET https://chatgpt.com/backend-api/wham/usage`
-3. **Request Headers** içindeki `authorization: Bearer <token>` satırından
-   `Bearer ` sonrasındaki uzun JWT değerini kopyalayın →
-   `session_key` alanına yazın (yalnızca token, `Bearer` kelimesi olmadan).
-4. Aynı istek başlıklarındaki `chatgpt-account-id` değerini →
-   `organization_id` alanına yazın.
-
----
-
-## Proje Yapısı
+## Project layout
 
 ```
-.
-├── cmd/ai-tempo/main.go     # giriş noktası (yalnızca gui.Run() çağırır)
-├── internal/
-│   ├── config/              # ayarlar (settings.json), Keychain, eski config içe aktarımı
-│   ├── provider/            # Claude / Cursor / ChatGPT sorguları, tempo hesabı, tarih yardımcıları
-│   ├── usage/               # merkezi sorgu zamanlayıcı (aralık, sıralı istek, hata geri çekilmesi)
-│   └── gui/                 # pencere, menü çubuğu, ayarlar penceresi, tema, ikonlar
-│       └── icons/           # gömülü SVG/PNG ikonlar
-├── assets/Icon.png          # .app / Finder simgesi
-├── Makefile
-└── go.mod
+cmd/ai-tempo/        entry point
+internal/config/     settings.json, Keychain, migrations
+internal/provider/   Claude / Cursor / ChatGPT queries, pace, date helpers
+internal/usage/      central query scheduler
+internal/history/    SQLite query history and chart samples
+internal/i18n/       translations (Turkish source strings → English)
+internal/gui/        window, menu bar, settings, charts, theme, icons
 ```
 
-| Paket | Sorumluluk |
-|---|---|
-| `config` | `Account`/`Settings` tipleri, `settings.json` okuma/yazma, Keychain erişimi, eski addan ve `config.json`'dan geçiş |
-| `provider` | `Provider` arayüzü, her servis için ayrı dosya (`claude.go`, `cursor.go`, `chatgpt.go`), `CalcPace` |
-| `usage` | Tüm sorguları yapan `Store`; pencere ve menü aynı sonuçları paylaşır. GUI'ye bağımlı değildir |
-| `gui` | `app.go` (açılış, sekmeler), `tray.go`, `settings_window.go`, `cards.go`, `colorbar.go`, `theme.go`, `dock_darwin.go` |
+Dependencies point one way: `gui → usage → provider → config`.
 
-Bağımlılık yönü tek yönlüdür: `gui → usage → provider → config`.
-
-Yeni bir sağlayıcı eklemek için `internal/provider/` altına `Provider` arayüzünü
-implemente eden yeni bir dosya (örn. `gemini.go`) yazıp `init()` içinde
-`register(...)` ile kaydetmeniz yeterlidir; ikonunu `internal/gui/icons/`'a
-ekleyip `internal/gui/cards.go` → `providerIcon` içine tanımlayın.
+To add a provider, implement the `Provider` interface in a new file under
+`internal/provider/`, register it in `init()`, and add its icon in
+`internal/gui/icons/` and `providerIcon`. UI strings are written in Turkish
+and wrapped in `T(...)`. Add the English translation to
+`internal/i18n/en.go`.

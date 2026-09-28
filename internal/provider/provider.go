@@ -9,11 +9,19 @@ import (
 	"time"
 
 	"ai-tempo/internal/config"
+	"ai-tempo/internal/i18n"
+)
+
+var (
+	T  = i18n.T
+	Tf = i18n.Tf
 )
 
 // UsageMetric, bir hesabın tek bir kota göstergesini temsil eder
 // (örn. "Mevcut Oturum (5 Saatlik)" veya "Aylık İstek Limiti").
 type UsageMetric struct {
+	// ID, göstergenin dilden bağımsız sabit adıdır (grafik ölçümleri bununla saklanır).
+	ID         string
 	Label      string
 	Subtitle   string
 	Percent    float64
@@ -21,6 +29,10 @@ type UsageMetric struct {
 	// TimeProgress, pencerenin başlangıcından bu yana geçen sürenin oranıdır (0-1).
 	// Reset zamanına yaklaştıkça 1'e gider. Hesaplanamıyorsa -1 olmalıdır.
 	TimeProgress float64
+	// WindowStart ve ResetsAt, dönemin mutlak başı ve sonudur (grafik için);
+	// bilinmiyorsa sıfır kalır.
+	WindowStart time.Time
+	ResetsAt    time.Time
 }
 
 // RateLimitInfo, bir hesap için sorgulanmış ve UI'da gösterime hazır kota bilgisidir.

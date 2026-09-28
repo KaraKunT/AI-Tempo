@@ -16,6 +16,9 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"ai-tempo/internal/config"
+	"ai-tempo/internal/history"
+	"ai-tempo/internal/i18n"
+	"ai-tempo/internal/provider"
 	"ai-tempo/internal/usage"
 )
 
@@ -48,6 +51,12 @@ func Run() {
 		os.Exit(1)
 	}
 
+	if err := history.Open(config.DataDir()); err != nil {
+		fmt.Println("⚠ Sorgu geçmişi açılamadı:", err)
+	}
+	history.SetRetention(config.Current.HistoryDays)
+	i18n.Set(config.Current.Language)
+
 	myApp := app.NewWithID("com.karakunt.ai-tempo")
 	myApp.SetIcon(appIcon)
 	myApp.Settings().SetTheme(modernTheme{})
@@ -64,6 +73,8 @@ func Run() {
 	openSettings = func() {
 		showSettings(myApp, func() {
 			loadAccountTabs(openSettings)
+			// Dil değişmiş olabilir: başlık ve düğmeler yeniden oluşturulur.
+			mainWindow.SetContent(buildMainLayout(mainBody, newStatusBar(), refreshCurrentTab, refreshAllTabs, openSettings))
 			store.Notify()
 			store.Refresh(config.EnabledAccounts(), false) // yeni/değişen hesaplar hemen sorgulanır
 		})
@@ -72,10 +83,12 @@ func Run() {
 	tabContainer = container.NewAppTabs()
 	mainBody = container.NewStack()
 	loadAccountTabs(openSettings)
+	tabContainer.OnSelected = func(*container.TabItem) { updateStatus() }
 	onStoreChange(func() {
 		for _, h := range accountTabs {
 			h.render()
 		}
+		tabContainer.Refresh()
 	})
 
 	onStoreChange(updateStatus)
@@ -116,15 +129,19 @@ func Run() {
 		})
 	}
 
-	myApp.Lifecycle().SetOnStarted(func() { fyne.Do(hideFromDock) })
+	myApp.Lifecycle().SetOnStarted(func() {
+		fyne.Do(func() {
+			hideFromDock()
+			rememberWindowFrame(mainWindow, "AITempoMainWindow")
+		})
+	})
 	store.Start()
 	if len(config.Current.Accounts) == 0 {
 		openSettings()
 	}
 	if config.LegacyConfigPath != "" {
-		dialog.ShowInformation("Hesaplar içe aktarıldı",
-			"config.json'daki hesaplar Ayarlar'a, anahtarlar Keychain'e taşındı.\n"+
-				"Artık bu dosya kullanılmıyor; anahtarlar düz metin olarak durmasın diye silebilirsiniz:\n\n"+config.LegacyConfigPath,
+		dialog.ShowInformation(T("Hesaplar içe aktarıldı"),
+			T("config.json'daki hesaplar Ayarlar'a, anahtarlar Keychain'e taşındı.\nArtık bu dosya kullanılmıyor; anahtarlar düz metin olarak durmasın diye silebilirsiniz:")+"\n\n"+config.LegacyConfigPath,
 			mainWindow)
 	}
 
@@ -171,7 +188,7 @@ func refreshCurrentTab() {
 	for _, h := range accountTabs {
 		if h.tabItem == sel {
 			if store.Refresh([]config.Account{h.account}, true) == 0 {
-				flashStatus("“" + h.account.Name + "” az önce güncellendi (30 sn içinde tekrar sorgulanmaz)")
+				flashStatus(Tf("“%s” az önce güncellendi (30 sn içinde tekrar sorgulanmaz)", h.account.Name))
 			}
 			return
 		}
@@ -181,7 +198,7 @@ func refreshCurrentTab() {
 // refreshAllTabs, tüm etkin hesapları yeniden sorgular.
 func refreshAllTabs() {
 	if store.Refresh(config.EnabledAccounts(), true) == 0 {
-		flashStatus("Tüm hesaplar az önce güncellendi (30 sn içinde tekrar sorgulanmaz)")
+		flashStatus(T("Tüm hesaplar az önce güncellendi (30 sn içinde tekrar sorgulanmaz)"))
 	}
 }
 
@@ -196,32 +213,53 @@ func newStatusBar() fyne.CanvasObject {
 	return container.NewCenter(container.NewHBox(statusSpinner, statusText))
 }
 
-// updateStatus, durum satırını store'un yükleniyor/son güncelleme bilgisine göre yeniler.
+// selectedHandle, o an seçili sekmenin hesabını döndürür.
+func selectedHandle() *accountTabHandle {
+	sel := tabContainer.Selected()
+	for _, h := range accountTabs {
+		if h.tabItem == sel {
+			return h
+		}
+	}
+	return nil
+}
+
+// updateStatus, durum satırında yalnızca seçili sekmenin hesabının durumunu gösterir.
 func updateStatus() {
 	if statusText == nil {
 		statusText = canvas.NewText("", colorMuted)
 		statusText.TextSize = 12
 		statusSpinner = widget.NewActivity()
 	}
-	loading, updated := store.Status()
-	switch {
-	case loading:
-		statusText.Text = "Yenileniyor…"
-		statusText.Color = colorAccent
-		statusSpinner.Show()
-		statusSpinner.Start()
-	default:
-		statusSpinner.Stop()
-		statusSpinner.Hide()
-		if time.Now().Before(flashUntil) {
+	h := selectedHandle()
+	loading := false
+	if h != nil {
+		var info *provider.RateLimitInfo
+		info, loading = store.Get(h.account.ID)
+		if !loading && time.Now().Before(flashUntil) {
 			return
 		}
-		statusText.Color = colorMuted
-		if updated.IsZero() {
-			statusText.Text = ""
-		} else {
-			statusText.Text = "✓ Son güncelleme: " + updated.Format("15:04:05")
+		name := h.account.Name
+		last := store.LastFetched(h.account.ID)
+		switch {
+		case loading:
+			statusText.Text, statusText.Color = name+" · "+T("Yenileniyor…"), colorAccent
+		case info == nil:
+			statusText.Text, statusText.Color = name+" · "+T("Henüz sorgulanmadı"), colorMuted
+		case info.Success:
+			statusText.Text, statusText.Color = "✓ "+name+" · "+T("Son güncelleme:")+" "+last.Format("15:04:05"), colorMuted
+		default:
+			statusText.Text, statusText.Color = "✗ "+name+" · "+T("Hata")+" · "+last.Format("15:04:05"), colorDanger
 		}
+	} else {
+		statusText.Text = ""
+	}
+	if loading {
+		statusSpinner.Show()
+		statusSpinner.Start()
+	} else {
+		statusSpinner.Stop()
+		statusSpinner.Hide()
 	}
 	statusText.Refresh()
 }
