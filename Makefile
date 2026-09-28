@@ -5,6 +5,11 @@ APP_ID       := com.karakunt.ai-tempo
 GOBIN        := $(shell go env GOPATH)/bin
 FYNE         := $(GOBIN)/fyne
 
+# İmza / onay (notarization). Değerler depoya yazılmaz; yerel Keychain'den gelir.
+SIGN_IDENTITY  ?= $(shell security find-identity -v -p codesigning | grep -m1 "Developer ID Application" | awk '{print $$2}')
+NOTARY_PROFILE ?= ai-tempo
+NOTARIZE       ?= 1
+
 .PHONY: help build run clean tidy fmt package release login-add login-remove
 
 ## help: Kullanılabilir komutları listeler (varsayılan hedef)
@@ -45,14 +50,27 @@ package: $(FYNE)
 	@echo "✓ $(APP_BUNDLE) hazır. İlk açılışta Gatekeeper uyarısı çıkarsa"
 	@echo "  Finder'da uygulamaya sağ tıklayıp 'Aç' deyin."
 
-## release: Dağıtım için Intel + Apple Silicon (universal) .app üretir ve
-## dist/AI-Tempo-macOS.zip olarak paketler (GitHub Releases'e yüklenecek dosya).
+## release: Dağıtım için Intel + Apple Silicon (universal) .app üretir, Developer ID
+## ile imzalar, Apple'a onaylatır (notarize) ve dist/AI-Tempo-macOS.zip olarak paketler.
+## Kimlik bilgileri depoya yazılmaz: imza sertifikası Keychain'den bulunur, notary
+## bilgileri `xcrun notarytool store-credentials $(NOTARY_PROFILE)` ile bir kez kaydedilir.
+## NOTARIZE=0 ile yalnızca imzalar (onaysız).
 release: package
 	CGO_ENABLED=1 GOARCH=amd64 go build -o dist/$(APP_NAME)-amd64 ./cmd/ai-tempo
 	CGO_ENABLED=1 GOARCH=arm64 go build -o dist/$(APP_NAME)-arm64 ./cmd/ai-tempo
 	lipo -create -output "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)" dist/$(APP_NAME)-amd64 dist/$(APP_NAME)-arm64
 	rm -f dist/$(APP_NAME)-amd64 dist/$(APP_NAME)-arm64
-	codesign --force --deep -s - "$(APP_BUNDLE)"
+	@test -n "$(SIGN_IDENTITY)" || { echo "❌ Keychain'de 'Developer ID Application' sertifikası yok"; exit 1; }
+	codesign --force --deep --options runtime --timestamp -s "$(SIGN_IDENTITY)" "$(APP_BUNDLE)"
+	codesign --verify --strict --deep "$(APP_BUNDLE)"
+	rm -f dist/AI-Tempo-macOS.zip
+ifneq ($(NOTARIZE),0)
+	ditto -c -k --keepParent "$(APP_BUNDLE)" dist/notarize.zip
+	xcrun notarytool submit dist/notarize.zip --keychain-profile "$(NOTARY_PROFILE)" --wait
+	rm -f dist/notarize.zip
+	xcrun stapler staple "$(APP_BUNDLE)"
+	spctl --assess --type execute "$(APP_BUNDLE)"
+endif
 	ditto -c -k --keepParent "$(APP_BUNDLE)" dist/AI-Tempo-macOS.zip
 	@echo "✓ dist/AI-Tempo-macOS.zip hazır ($$(lipo -archs "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"))"
 

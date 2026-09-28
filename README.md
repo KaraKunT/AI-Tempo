@@ -22,14 +22,9 @@ otherwise). You can change it in Settings → Language.
    [latest release](https://github.com/KaraKunT/AI-Tempo/releases/latest).
    It runs on both Apple Silicon and Intel Macs.
 2. Unzip it and move **AI Tempo.app** to your Applications folder.
-3. The app is not notarized by Apple, so macOS blocks it the first time you
-   open it. Either:
-   - open **System Settings → Privacy & Security** and click
-     **Open Anyway** next to the AI Tempo message, or
-   - run this once in Terminal:
-     ```bash
-     xattr -dr com.apple.quarantine "/Applications/AI Tempo.app"
-     ```
+
+The app is signed with a Developer ID and notarized by Apple, so it opens
+without a security warning.
 
 AI Tempo runs in the menu bar only. It does not appear in the Dock or in
 Cmd+Tab.
@@ -120,7 +115,8 @@ Requires Go and Xcode Command Line Tools.
 ```bash
 make run       # build and run from the terminal
 make package   # build "AI Tempo.app"
-make release   # universal (Intel + Apple Silicon) app → dist/AI-Tempo-macOS.zip
+make release   # universal (Intel + Apple Silicon), signed + notarized → dist/AI-Tempo-macOS.zip
+make release NOTARIZE=0   # sign only (needs a Developer ID certificate)
 ```
 
 Start at login:

@@ -24,14 +24,9 @@ Ayarlar → Dil bölümünden değiştirebilirsiniz.
    **`AI-Tempo-macOS.zip`** dosyasını indirin. Apple Silicon ve Intel
    Mac'lerde çalışır.
 2. Zip'i açın ve **AI Tempo.app**'i Uygulamalar klasörüne taşıyın.
-3. Uygulama Apple tarafından onaylanmadığı (notarize edilmediği) için macOS
-   ilk açılışta engeller. İki yoldan biriyle açabilirsiniz:
-   - **Sistem Ayarları → Gizlilik ve Güvenlik** bölümünde AI Tempo
-     uyarısının yanındaki **Yine de Aç** düğmesine basın, ya da
-   - Terminal'de bir kez şunu çalıştırın:
-     ```bash
-     xattr -dr com.apple.quarantine "/Applications/AI Tempo.app"
-     ```
+
+Uygulama Developer ID ile imzalı ve Apple tarafından onaylı (notarize
+edilmiş). Güvenlik uyarısı olmadan açılır.
 
 AI Tempo yalnızca menü çubuğunda çalışır. Dock'ta ve Cmd+Tab'da görünmez.
 
@@ -125,7 +120,8 @@ Go ve Xcode Command Line Tools gerekir.
 ```bash
 make run       # derler ve terminalden çalıştırır
 make package   # "AI Tempo.app" üretir
-make release   # Intel + Apple Silicon (universal) uygulama → dist/AI-Tempo-macOS.zip
+make release   # Intel + Apple Silicon (universal), imzalı + onaylı → dist/AI-Tempo-macOS.zip
+make release NOTARIZE=0   # yalnızca imzalar (Developer ID sertifikası gerekir)
 ```
 
 Oturum açılışında başlatma:
