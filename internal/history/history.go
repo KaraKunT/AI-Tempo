@@ -26,6 +26,7 @@ func SetRetention(days int) {
 
 // Sample, bir kota göstergesinin belirli bir andaki kullanım yüzdesidir.
 type Sample struct {
+	Metric  string // gösterge ID'si (yalnızca List'in döndürdüğü kayıtlarda dolu)
 	At      time.Time
 	Percent float64
 }
@@ -37,6 +38,7 @@ type Entry struct {
 	Trigger  string // "Otomatik", "Elle", "Sıfırlama"
 	Message  string // hata mesajı veya kota özeti
 	Duration time.Duration
+	Metrics  []Sample // başarılı sorgunun gösterge yüzdeleri (aynı andaki ölçümler)
 }
 
 var (
@@ -127,6 +129,28 @@ func List(accountID string, from, to time.Time) []Entry {
 			e.Duration = time.Duration(ms) * time.Millisecond
 			out = append(out, e)
 		}
+	}
+	rows.Close()
+
+	// Her kayda, aynı anda kaydedilmiş gösterge ölçümlerini ekle.
+	srows, err := db.Query(`SELECT label, at, percent FROM samples
+		WHERE account_id = ? AND at >= ? AND at < ? ORDER BY rowid`,
+		accountID, from.UnixMilli(), to.UnixMilli())
+	if err != nil {
+		return out
+	}
+	defer srows.Close()
+	byAt := map[int64][]Sample{}
+	for srows.Next() {
+		var s Sample
+		var at int64
+		if srows.Scan(&s.Metric, &at, &s.Percent) == nil {
+			s.At = time.UnixMilli(at)
+			byAt[at] = append(byAt[at], s)
+		}
+	}
+	for i := range out {
+		out[i].Metrics = byAt[out[i].At.UnixMilli()]
 	}
 	return out
 }

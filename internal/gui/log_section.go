@@ -2,6 +2,10 @@ package gui
 
 import (
 	"fmt"
+	"image/color"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -19,7 +23,8 @@ const maxLogRows = 300
 // newLogSection, sekmenin altındaki açılır "Sorgu Geçmişi" bölümünü oluşturur.
 // Dönen refresh fonksiyonu kayıtları veritabanından yeniden okur; bölüm açık
 // değilse yalnızca başlıktaki sayıyı günceller.
-func newLogSection(accountID string) (fyne.CanvasObject, func()) {
+// metricLabels, gösterge ID'lerini güncel (etkin dildeki) adlarına çevirir.
+func newLogSection(accountID string, metricLabels func() map[string]string) (fyne.CanvasObject, func()) {
 	rows := container.NewVBox()
 	open := false
 	selected := rangeToday
@@ -52,7 +57,7 @@ func newLogSection(accountID string) (fyne.CanvasObject, func()) {
 		}
 		header.SetText(title)
 		if open {
-			rows.Objects = logRows(entries)
+			rows.Objects = logRows(entries, metricLabels())
 			rows.Refresh()
 		}
 	}
@@ -73,7 +78,7 @@ func newLogSection(accountID string) (fyne.CanvasObject, func()) {
 }
 
 // logRows, kayıtları gün başlıklarıyla ayrılmış satırlara dönüştürür.
-func logRows(entries []history.Entry) []fyne.CanvasObject {
+func logRows(entries []history.Entry, labels map[string]string) []fyne.CanvasObject {
 	if len(entries) == 0 {
 		t := canvas.NewText(T("Bu aralıkta kayıt yok."), colorMuted)
 		t.TextSize = 12
@@ -95,13 +100,13 @@ func logRows(entries []history.Entry) []fyne.CanvasObject {
 			h.TextStyle = fyne.TextStyle{Bold: true}
 			out = append(out, container.New(layout.NewCustomPaddedLayout(8, 2, 4, 0), h))
 		}
-		out = append(out, logRow(e))
+		out = append(out, logRow(e, labels))
 	}
 	return out
 }
 
 // logRow, tek bir kaydı "● saat [tetik] mesaj ... süre" düzeninde çizer.
-func logRow(e history.Entry) fyne.CanvasObject {
+func logRow(e history.Entry, labels map[string]string) fyne.CanvasObject {
 	col := colorGood
 	if !e.Success {
 		col = colorDanger
@@ -129,10 +134,90 @@ func logRow(e history.Entry) fyne.CanvasObject {
 	dur := canvas.NewText(formatDuration(e.Duration), colorMuted)
 	dur.TextSize = 11
 	dur.TextStyle = fyne.TextStyle{Monospace: true}
+	dur.Alignment = fyne.TextAlignTrailing
+	// Sabit genişlikli süre sütunu: "47 ms" ile "1.2 s" aynı hizada durur.
+	durBox := container.NewGridWrap(fyne.NewSize(52, dur.MinSize().Height), dur)
 
 	left := container.NewHBox(container.NewCenter(dotBox), timeText, container.NewCenter(chip))
-	row := container.NewBorder(nil, nil, left, dur, msg)
+	var center fyne.CanvasObject = msg
+	metrics := e.Metrics
+	if e.Success && len(metrics) == 0 {
+		// Ölçüm kaydı başlamadan önceki kayıtlar: yüzdeleri mesajdan oku.
+		metrics = parseLogMetrics(e.Message)
+	}
+	if e.Success && len(metrics) > 0 {
+		center = metricBars(metrics, labels)
+	}
+	row := container.NewBorder(nil, nil, left, container.NewCenter(durBox), center)
 	return container.New(layout.NewCustomPaddedLayout(2, 2, 4, 4), row)
+}
+
+// metricBars, başarılı bir kaydın göstergelerini "ad ▬▬▭ %70" şeklinde,
+// sağa dayalı ve yan yana küçük ilerleme çubuklarıyla çizer.
+func metricBars(metrics []history.Sample, labels map[string]string) fyne.CanvasObject {
+	cols := make([]fyne.CanvasObject, 0, len(metrics))
+	for _, m := range metrics {
+		name := labels[m.Metric]
+		if name == "" {
+			name = T(m.Metric) // eski kayıtlarda Metric, Türkçe gösterge adıdır
+		}
+		col := severityColor(m.Percent)
+
+		label := canvas.NewText(name, colorMuted)
+		label.TextSize = 11
+
+		bar := newColoredProgressBar(6)
+		bar.SetValue(m.Percent/100, col)
+		barBox := container.NewGridWrap(fyne.NewSize(60, 6), bar)
+
+		pct := canvas.NewText(fmt.Sprintf("%.0f%%", m.Percent), col)
+		pct.TextSize = 11
+		pct.TextStyle = fyne.TextStyle{Bold: true, Monospace: true}
+		// Sabit genişlik ("100%" sığar): satırlar arasında çubuklar ve yüzdeler
+		// hizalı kalır; sola dayalı olduğu için yüzde çubuğun hemen yanında durur.
+		pctBox := container.NewGridWrap(fyne.NewSize(30, pct.MinSize().Height), pct)
+
+		if len(cols) > 0 {
+			cols = append(cols, hSpace(14)) // gruplar arası boşluk
+		}
+		cols = append(cols, label, container.NewCenter(barBox), pctBox)
+	}
+	// Gruplar süre sütununun yanına, sağa dayalı çizilir.
+	// Sondaki boşluk, grupları süre sütunundan ayırır.
+	cols = append(cols, hSpace(28))
+	return container.NewHBox(append([]fyne.CanvasObject{layout.NewSpacer()}, cols...)...)
+}
+
+// hSpace, verilen genişlikte görünmez yatay boşluk döndürür.
+func hSpace(w float32) fyne.CanvasObject {
+	r := canvas.NewRectangle(color.Transparent)
+	r.SetMinSize(fyne.NewSize(w, 1))
+	return r
+}
+
+// logMetricRe, eski kayıt mesajlarındaki "Ad %70" veya "Ad 70%" parçalarını yakalar.
+var logMetricRe = regexp.MustCompile(`^(.+?) (?:%(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)%)$`)
+
+// parseLogMetrics, "Mevcut Oturum %5 · Haftalık Limit %70" biçimindeki mesajı
+// göstergelere ayırır. Gösterge adı ID yerine olduğu gibi kullanılır.
+func parseLogMetrics(msg string) []history.Sample {
+	var out []history.Sample
+	for _, part := range strings.Split(msg, " · ") {
+		m := logMetricRe.FindStringSubmatch(strings.TrimSpace(part))
+		if m == nil {
+			return nil
+		}
+		num := m[2]
+		if num == "" {
+			num = m[3]
+		}
+		p, err := strconv.ParseFloat(num, 64)
+		if err != nil {
+			return nil
+		}
+		out = append(out, history.Sample{Metric: m[1], Percent: p})
+	}
+	return out
 }
 
 // dayLabel, kaydın gününü "Bugün", "Dün" veya tarih olarak döndürür.

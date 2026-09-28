@@ -108,7 +108,15 @@ func createAccountTab(account config.Account) *accountTabHandle {
 	prov := provider.Get(account.Provider)
 
 	body := container.NewVBox()
-	logSection, refreshLog := newLogSection(account.ID)
+	logSection, refreshLog := newLogSection(account.ID, func() map[string]string {
+		labels := map[string]string{}
+		if info, _ := store.Get(account.ID); info != nil {
+			for _, m := range info.Metrics {
+				labels[m.ID] = m.Label
+			}
+		}
+		return labels
+	})
 	chartCards := container.NewVBox()
 	chartRange := rangePeriod
 	var lastInfo *provider.RateLimitInfo
