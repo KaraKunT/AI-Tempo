@@ -207,20 +207,24 @@ func showSettings(app fyne.App, onChanged func()) {
 	})
 	refreshSelect.SetSelected(refreshLabel(config.Current.RefreshMinutes))
 
+	langPref := config.Current.Language
+	if langPref == "" {
+		langPref = i18n.Auto
+	}
 	langNames := make([]string, len(i18n.Languages))
 	for i, l := range i18n.Languages {
-		langNames[i] = l.Name
+		langNames[i] = T(l.Name)
 	}
 	langSelect := widget.NewSelect(langNames, nil)
-	for _, l := range i18n.Languages {
-		if l.Code == i18n.Lang() {
-			langSelect.SetSelected(l.Name)
+	for i, l := range i18n.Languages {
+		if l.Code == langPref {
+			langSelect.SetSelected(langNames[i])
 		}
 	}
 	langSelect.OnChanged = func(sel string) {
-		for _, l := range i18n.Languages {
-			if l.Name == sel && l.Code != i18n.Lang() {
-				i18n.Set(l.Code)
+		for i, l := range i18n.Languages {
+			if langNames[i] == sel && l.Code != langPref {
+				applyLanguage(l.Code)
 				config.Current.Language = l.Code
 				// Sonuçlardaki metinler (gösterge adları, hatalar) yeni dilde gelsin diye yeniden sorgulanır.
 				for _, a := range config.Current.Accounts {

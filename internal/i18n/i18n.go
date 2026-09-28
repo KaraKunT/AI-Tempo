@@ -1,23 +1,40 @@
 // Package i18n, arayüz metinlerinin çevirisini sağlar. Kaynak metinler
 // Türkçedir ve anahtar olarak kullanılır; İngilizce karşılıkları en.go'dadır.
-// Varsayılan dil İngilizcedir.
+// Varsayılan tercih sistem dilidir (Auto); desteklenmeyen dillerde İngilizce kullanılır.
 package i18n
 
 import (
 	"fmt"
+	"strings"
 	"sync/atomic"
 )
 
-// Desteklenen diller.
+// Desteklenen diller. Auto, sistem dilini kullanır (Türkçe değilse İngilizce).
 const (
+	Auto    = "auto"
 	English = "en"
 	Turkish = "tr"
 )
 
 // Languages, ayarlarda gösterilen dil seçenekleridir (kod → kendi dilindeki adı).
+// Auto'nun adı T() ile etkin dilde gösterilir.
 var Languages = []struct{ Code, Name string }{
+	{Auto, "Otomatik (sistem dili)"},
 	{English, "English"},
 	{Turkish, "Türkçe"},
+}
+
+// Resolve, ayardaki tercihi (boş/"auto", "en", "tr") sistem diline göre somut
+// dile çevirir. systemLocale "tr-TR" gibi bir BCP 47 etiketidir.
+func Resolve(pref, systemLocale string) string {
+	switch pref {
+	case English, Turkish:
+		return pref
+	}
+	if strings.HasPrefix(strings.ToLower(systemLocale), Turkish) {
+		return Turkish
+	}
+	return English
 }
 
 var current atomic.Value

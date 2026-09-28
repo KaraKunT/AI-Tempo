@@ -8,7 +8,8 @@ sekmesinde görünür. Her kota kartında **kullanım yüzdesi**, **sıfırlanma
 kalan süre** ve **tempo** gösterilir. Tempo, bu hızla kotanın dönem bitmeden
 dolup dolmayacağını söyler.
 
-Arayüz **İngilizce** (varsayılan) ve **Türkçe** kullanılabilir. Dili
+Arayüz **İngilizce** ve **Türkçe** kullanılabilir. Varsayılan olarak macOS
+dilinizi izler: sistem Türkçeyse Türkçe, değilse İngilizce açılır. Dili
 Ayarlar → Dil bölümünden değiştirebilirsiniz.
 
 > ⚠️ AI Tempo **resmi API'leri kullanmaz**. claude.ai, cursor.com ve
@@ -87,7 +88,7 @@ mevcut anahtar korunur.
 
 | Ayar | Seçenekler |
 |---|---|
-| Dil | English (varsayılan), Türkçe |
+| Dil | Otomatik (sistem dili, varsayılan), English, Türkçe |
 | Otomatik yenileme | 5, 10, 15, 30 dakika · 1, 2, 4, 8, 16, 24 saat |
 | Geçmişi sakla | 2, 7, 14, 35 (varsayılan), 60, 90 gün. Cursor gibi aylık dönemler için en az 35 gün seçin |
 

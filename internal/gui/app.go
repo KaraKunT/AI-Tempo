@@ -17,7 +17,6 @@ import (
 
 	"ai-tempo/internal/config"
 	"ai-tempo/internal/history"
-	"ai-tempo/internal/i18n"
 	"ai-tempo/internal/provider"
 	"ai-tempo/internal/usage"
 )
@@ -55,7 +54,7 @@ func Run() {
 		fmt.Println("⚠ Sorgu geçmişi açılamadı:", err)
 	}
 	history.SetRetention(config.Current.HistoryDays)
-	i18n.Set(config.Current.Language)
+	applyLanguage(config.Current.Language)
 
 	myApp := app.NewWithID("com.karakunt.ai-tempo")
 	myApp.SetIcon(appIcon)

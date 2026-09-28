@@ -7,8 +7,9 @@ A macOS menu bar app that tracks the usage limits of your **Claude.ai**,
 tab. Each quota card shows **usage percentage**, **time until reset** and
 **pace**: whether you are on track to run out before the period ends.
 
-The interface is available in **English** (default) and **Turkish**
-(Settings → Language).
+The interface is available in **English** and **Turkish**. By default it
+follows your macOS language (Turkish if your system is Turkish, English
+otherwise). You can change it in Settings → Language.
 
 > ⚠️ AI Tempo does **not** use official APIs. It calls the same internal
 > endpoints that claude.ai, cursor.com and chatgpt.com use in your browser.
@@ -83,7 +84,7 @@ account → Edit**. If you leave the field empty, the existing key is kept.
 
 | Setting | Options |
 |---|---|
-| Language | English (default), Türkçe |
+| Language | Automatic (system language, default), English, Türkçe |
 | Auto refresh | 5, 10, 15, 30 minutes · 1, 2, 4, 8, 16, 24 hours |
 | Keep history | 2, 7, 14, 35 (default), 60, 90 days. Use at least 35 days to cover monthly periods such as Cursor's |
 

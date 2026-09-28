@@ -37,7 +37,7 @@ type Account struct {
 type Settings struct {
 	RefreshMinutes int       `json:"refresh_minutes"`
 	HistoryDays    int       `json:"history_days"`       // sorgu geçmişi ve grafik verisinin saklanma süresi
-	Language       string    `json:"language,omitempty"` // "en" (varsayılan) veya "tr"
+	Language       string    `json:"language,omitempty"` // "auto" (boş = auto, sistem dili), "en" veya "tr"
 	Accounts       []Account `json:"accounts"`
 }
 

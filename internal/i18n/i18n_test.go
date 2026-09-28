@@ -15,6 +15,22 @@ func TestFormatVerbsMatch(t *testing.T) {
 	}
 }
 
+func TestResolve(t *testing.T) {
+	cases := []struct{ pref, sys, want string }{
+		{"", "tr-TR", Turkish},
+		{Auto, "tr", Turkish},
+		{Auto, "en-US", English},
+		{Auto, "de-DE", English},
+		{English, "tr-TR", English},
+		{Turkish, "en-US", Turkish},
+	}
+	for _, c := range cases {
+		if got := Resolve(c.pref, c.sys); got != c.want {
+			t.Errorf("Resolve(%q, %q) = %q, want %q", c.pref, c.sys, got, c.want)
+		}
+	}
+}
+
 func TestDefaultEnglish(t *testing.T) {
 	Set("")
 	if got := T("Yenile"); got != "Refresh" {
