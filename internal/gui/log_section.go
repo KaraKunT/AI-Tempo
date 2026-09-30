@@ -17,8 +17,8 @@ import (
 	"ai-tempo/internal/history"
 )
 
-// maxLogRows, açılır geçmiş listesinde gösterilen en fazla kayıt sayısıdır.
-const maxLogRows = 300
+// logPageSize, geçmiş listesinde bir sayfada gösterilen kayıt sayısıdır.
+const logPageSize = 50
 
 // newLogSection, sekmenin altındaki açılır "Sorgu Geçmişi" bölümünü oluşturur.
 // Dönen refresh fonksiyonu kayıtları veritabanından yeniden okur; bölüm açık
@@ -26,16 +26,19 @@ const maxLogRows = 300
 // metricLabels, gösterge ID'lerini güncel (etkin dildeki) adlarına çevirir.
 func newLogSection(accountID string, metricLabels func() map[string]string) (fyne.CanvasObject, func()) {
 	rows := container.NewVBox()
+	pager := container.NewHBox()
 	open := false
+	page := 0
 	selected := rangeToday
 	var header *widget.Button
 	var refresh func()
 
 	filter := newRangeSelector([]timeRange{rangeToday, rangeYesterday, rangeWeek, rangeMonth}, selected, func(r timeRange) {
 		selected = r
+		page = 0
 		refresh()
 	})
-	panel := container.NewVBox(container.NewCenter(filter), rows)
+	panel := container.NewVBox(container.NewCenter(filter), rows, container.NewCenter(pager))
 	panel.Hide()
 
 	refresh = func() {
@@ -57,8 +60,17 @@ func newLogSection(accountID string, metricLabels func() map[string]string) (fyn
 		}
 		header.SetText(title)
 		if open {
-			rows.Objects = logRows(entries, metricLabels())
+			pages := (len(entries) + logPageSize - 1) / logPageSize
+			page = max(0, min(page, pages-1))
+			start := page * logPageSize
+			end := min(start+logPageSize, len(entries))
+			rows.Objects = logRows(entries[start:end], metricLabels())
 			rows.Refresh()
+			pager.Objects = pagerButtons(page, pages, func(p int) {
+				page = p
+				refresh()
+			})
+			pager.Refresh()
 		}
 	}
 	header = widget.NewButton("", func() {
@@ -77,6 +89,55 @@ func newLogSection(accountID string, metricLabels func() map[string]string) (fyn
 	return newRoundedCard(container.NewVBox(header, panel)), refresh
 }
 
+// pagerButtons, "< 1 … 4 5 6 … 12 >" düzeninde sayfa düğmelerini oluşturur.
+// Tek sayfa varsa boş döner.
+func pagerButtons(page, pages int, onSelect func(int)) []fyne.CanvasObject {
+	if pages <= 1 {
+		return nil
+	}
+	btn := func(label string, p int, enabled bool) fyne.CanvasObject {
+		b := widget.NewButton(label, func() { onSelect(p) })
+		b.Importance = widget.LowImportance
+		if p == page && label != "<" && label != ">" {
+			b.Importance = widget.HighImportance
+		}
+		if !enabled {
+			b.Disable()
+		}
+		return b
+	}
+	dots := func() fyne.CanvasObject {
+		t := canvas.NewText("…", colorMuted)
+		return container.NewCenter(t)
+	}
+	out := []fyne.CanvasObject{btn("<", page-1, page > 0)}
+	for _, p := range pageWindow(page, pages) {
+		if p < 0 {
+			out = append(out, dots())
+			continue
+		}
+		out = append(out, btn(strconv.Itoa(p+1), p, true))
+	}
+	return append(out, btn(">", page+1, page < pages-1))
+}
+
+// pageWindow, gösterilecek sayfa numaralarını (0 tabanlı) döndürür: ilk, son
+// ve geçerli sayfanın komşuları; aradaki boşluklar -1 ile işaretlenir.
+func pageWindow(page, pages int) []int {
+	var out []int
+	last := -1
+	for p := 0; p < pages; p++ {
+		if p == 0 || p == pages-1 || (p >= page-1 && p <= page+1) {
+			if last >= 0 && p-last > 1 {
+				out = append(out, -1)
+			}
+			out = append(out, p)
+			last = p
+		}
+	}
+	return out
+}
+
 // logRows, kayıtları gün başlıklarıyla ayrılmış satırlara dönüştürür.
 func logRows(entries []history.Entry, labels map[string]string) []fyne.CanvasObject {
 	if len(entries) == 0 {
@@ -86,13 +147,7 @@ func logRows(entries []history.Entry, labels map[string]string) []fyne.CanvasObj
 	}
 	var out []fyne.CanvasObject
 	lastDay := ""
-	for i, e := range entries {
-		if i == maxLogRows {
-			more := canvas.NewText(Tf("… %d kayıt daha", len(entries)-maxLogRows), colorMuted)
-			more.TextSize = 11
-			out = append(out, container.NewCenter(more))
-			break
-		}
+	for _, e := range entries {
 		if day := dayLabel(e.At); day != lastDay {
 			lastDay = day
 			h := canvas.NewText(day, colorMuted)

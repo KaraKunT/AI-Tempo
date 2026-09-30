@@ -20,6 +20,8 @@ func hideFromDock() {}
 func showInDock()   {}
 func activateApp()  {}
 
+func installDockReopen(func()) {}
+
 // Oturum açılış öğesi durumları (macOS sürümüyle aynı değerler).
 const (
 	loginNotRegistered   = 0

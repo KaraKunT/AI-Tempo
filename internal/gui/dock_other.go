@@ -8,6 +8,8 @@ func hideFromDock() {}
 func showInDock()   {}
 func activateApp()  {}
 
+func installDockReopen(func()) {}
+
 func rememberWindowFrame(fyne.Window, string) {}
 
 const (

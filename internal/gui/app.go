@@ -151,6 +151,12 @@ func Run() {
 	myApp.Lifecycle().SetOnStarted(func() {
 		fyne.Do(func() {
 			applyDockVisibility()
+			installDockReopen(func() {
+				fyne.Do(func() {
+					mainWindow.Show()
+					mainWindow.RequestFocus()
+				})
+			})
 			rememberWindowFrame(mainWindow, "AITempoMainWindow")
 		})
 	})

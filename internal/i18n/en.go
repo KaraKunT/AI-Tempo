@@ -43,7 +43,6 @@ var en = map[string]string{
 	"%d kayıt":               "%d entries",
 	"(%d hata)":              "(%d errors)",
 	"Bu aralıkta kayıt yok.": "No entries in this range.",
-	"… %d kayıt daha":        "… %d more entries",
 	"BUGÜN":                  "TODAY",
 	"DÜN":                    "YESTERDAY",
 	"%.1f sn":                "%.1f s",

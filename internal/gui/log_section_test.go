@@ -1,6 +1,9 @@
 package gui
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestParseLogMetrics(t *testing.T) {
 	got := parseLogMetrics("Mevcut Oturum %5 · Haftalık Limit %70")
@@ -28,5 +31,24 @@ func TestKeySummaryTruncated(t *testing.T) {
 	}
 	if text, _ := keySummary("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9"); text[:3] != "✓" {
 		t.Fatalf("sağlam anahtar ✓ ile başlamalı: %q", text)
+	}
+}
+
+func TestPageWindow(t *testing.T) {
+	cases := []struct {
+		page, pages int
+		want        string
+	}{
+		{0, 1, "[0]"},
+		{0, 3, "[0 1 2]"},
+		{0, 10, "[0 1 -1 9]"},
+		{5, 10, "[0 -1 4 5 6 -1 9]"},
+		{9, 10, "[0 -1 8 9]"},
+		{2, 10, "[0 1 2 3 -1 9]"},
+	}
+	for _, c := range cases {
+		if got := fmt.Sprint(pageWindow(c.page, c.pages)); got != c.want {
+			t.Errorf("pageWindow(%d, %d) = %s, want %s", c.page, c.pages, got, c.want)
+		}
 	}
 }

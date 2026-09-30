@@ -7,7 +7,27 @@ package gui
 #cgo LDFLAGS: -framework Cocoa -framework ServiceManagement
 #import <Cocoa/Cocoa.h>
 #import <ServiceManagement/ServiceManagement.h>
+#import <objc/runtime.h>
 #include <stdlib.h>
+
+extern void goDockReopen(void);
+
+// dockReopen, Dock simgesine tıklanınca çağrılır; pencere gizliyse Go tarafı gösterir.
+static BOOL dockReopen(id self, SEL _cmd, NSApplication *app, BOOL hasVisible) {
+	goDockReopen();
+	return YES;
+}
+
+// installReopenHandler, GLFW'nin uygulama delegesine eksik olan
+// applicationShouldHandleReopen:hasVisibleWindows: yöntemini ekler.
+static void installReopenHandler(void) {
+	id d = [NSApp delegate];
+	if (d == nil) return;
+	SEL sel = @selector(applicationShouldHandleReopen:hasVisibleWindows:);
+	if (!class_addMethod([d class], sel, (IMP)dockReopen, "c@:@c")) {
+		class_replaceMethod([d class], sel, (IMP)dockReopen, "c@:@c");
+	}
+}
 
 // loginItemStatus: 0 kayıtlı değil, 1 etkin, 2 kullanıcı onayı gerekiyor,
 // 3 bulunamadı (.app dışında çalışıyor), -1 desteklenmiyor (macOS < 13).
@@ -64,6 +84,23 @@ func hideFromDock() { C.hideFromDock() }
 
 // showInDock, uygulamayı Dock'ta ve Cmd+Tab'da gösterir.
 func showInDock() { C.showInDock() }
+
+// onDockReopen, Dock simgesine tıklanınca çalışacak fonksiyondur.
+var onDockReopen func()
+
+//export goDockReopen
+func goDockReopen() {
+	if onDockReopen != nil {
+		onDockReopen()
+	}
+}
+
+// installDockReopen, pencere x ile gizlendikten sonra Dock simgesine
+// tıklanınca pencerenin yeniden açılmasını sağlar. Açılıştan sonra çağrılmalıdır.
+func installDockReopen(show func()) {
+	onDockReopen = show
+	C.installReopenHandler()
+}
 
 // activateApp, Dock'ta olmayan uygulamanın penceresini öne getirir.
 func activateApp() { C.activateApp() }
