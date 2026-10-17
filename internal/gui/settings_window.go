@@ -215,9 +215,28 @@ func showSettings(app fyne.App, onChanged func()) {
 			})
 			del.Importance = widget.LowImportance
 
+			// Sekmeler ve menü bu listenin sırasını izler.
+			move := func(to int) func() {
+				return func() {
+					accs := config.Current.Accounts
+					accs[idx], accs[to] = accs[to], accs[idx]
+					save()
+				}
+			}
+			up := widget.NewButtonWithIcon("", theme.MoveUpIcon(), move(idx-1))
+			up.Importance = widget.LowImportance
+			if idx == 0 {
+				up.Disable()
+			}
+			down := widget.NewButtonWithIcon("", theme.MoveDownIcon(), move(idx+1))
+			down.Importance = widget.LowImportance
+			if idx == len(config.Current.Accounts)-1 {
+				down.Disable()
+			}
+
 			row := container.NewBorder(nil, nil,
 				container.NewHBox(icon, container.NewVBox(name, sub)),
-				container.NewHBox(enabled, edit, del),
+				container.NewHBox(enabled, up, down, edit, del),
 			)
 			accountList.Add(newRoundedCard(row))
 		}

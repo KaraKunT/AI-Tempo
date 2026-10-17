@@ -44,6 +44,11 @@ func TestCheckStatus(t *testing.T) {
 	}
 
 	info = RateLimitInfo{}
+	if checkStatus(&info, resp(307), nil, "Session süresi dolmuş", false) || !info.AuthExpired {
+		t.Fatalf("giriş sayfasına yönlendirme oturum hatası sayılmalı: %+v", info)
+	}
+
+	info = RateLimitInfo{}
 	if !checkStatus(&info, resp(200), nil, "x", false) {
 		t.Fatal("200 kabul edilmeli")
 	}

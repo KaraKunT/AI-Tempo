@@ -137,8 +137,16 @@ func (resettingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
-// httpClient, tüm sağlayıcıların ortak HTTP istemcisidir.
-var httpClient = &http.Client{Timeout: 10 * time.Second, Transport: resettingTransport{}}
+// httpClient, tüm sağlayıcıların ortak HTTP istemcisidir. Yönlendirmeler izlenmez:
+// oturumu düşen istekler giriş sayfasına yönlenir (Cursor → WorkOS) ve izlenirse
+// anlamsız bir 404 döner; 3xx yanıtı checkStatus'ta oturum hatası sayılır.
+var httpClient = &http.Client{
+	Timeout:   10 * time.Second,
+	Transport: resettingTransport{},
+	CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
 
 // browserUserAgent, isteklerin gerçek bir tarayıcıdan gelmiş gibi görünmesi için kullanılır.
 const browserUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
@@ -197,7 +205,8 @@ func checkStatus(info *RateLimitInfo, resp *http.Response, body []byte, expiredM
 		info.Error = Tf("Cloudflare engeli (HTTP %d), tekrar denenecek", resp.StatusCode)
 	case (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && keyValid:
 		info.Error = Tf("Erişim geçici olarak reddedildi (HTTP %d), tekrar denenecek", resp.StatusCode) + bodyHint(body)
-	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden,
+		resp.StatusCode >= 300 && resp.StatusCode < 400:
 		info.Error = expiredMsg + fmt.Sprintf(" (HTTP %d)", resp.StatusCode)
 		info.AuthExpired = true
 	default:
