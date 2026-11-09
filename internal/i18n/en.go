@@ -162,6 +162,7 @@ var en = map[string]string{
 	"Mevcut Oturum":                 "Current Session",
 	"Son 5 saatlik kullanım":        "Usage over the last 5 hours",
 	"Haftalık Limit":                "Weekly Limit",
+	"%s Limiti":                     "%s Limit",
 	"Son 7 günlük kullanım":         "Usage over the last 7 days",
 	"5 Saatlik Limit":               "5-Hour Limit",
 	"Kullanım Limiti":               "Usage Limit",

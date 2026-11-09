@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -51,5 +52,38 @@ func TestCheckStatus(t *testing.T) {
 	info = RateLimitInfo{}
 	if !checkStatus(&info, resp(200), nil, "x", false) {
 		t.Fatal("200 kabul edilmeli")
+	}
+}
+
+func TestParseClaudeUsageModelLimits(t *testing.T) {
+	// Gerçek yanıttan kısaltılmış örnek (2026-11-10).
+	body := []byte(`{
+		"five_hour": {"utilization": 22.0, "resets_at": "2026-11-10T02:50:00.476557+00:00"},
+		"seven_day": {"utilization": 28.0, "resets_at": "2026-11-13T05:00:00.476577+00:00"},
+		"seven_day_opus": null,
+		"seven_day_breakdown": null,
+		"limits": [
+			{"kind": "session", "group": "session", "percent": 22, "resets_at": "2026-11-10T02:50:00.476557+00:00", "scope": null},
+			{"kind": "weekly_all", "group": "weekly", "percent": 28, "resets_at": "2026-11-13T05:00:00.476577+00:00", "scope": null},
+			{"kind": "weekly_scoped", "group": "weekly", "percent": 21, "resets_at": "2026-11-13T05:00:00.476894+00:00",
+			 "scope": {"model": {"id": null, "display_name": "Fable"}, "surface": null}}
+		]
+	}`)
+	metrics, err := parseClaudeUsage(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metrics) != 3 || metrics[0].Percent != 22 || metrics[1].Percent != 28 {
+		t.Fatalf("3 gösterge beklendi: %+v", metrics)
+	}
+	f := metrics[2]
+	if f.ID != "weekly_fable" || f.Percent != 21 || !strings.HasPrefix(f.Label, "Fable ") || f.ResetsAt.IsZero() {
+		t.Fatalf("Fable limiti hatalı: %+v", f)
+	}
+
+	// Fable limiti olmayan hesap: yalnızca iki gösterge.
+	metrics, err = parseClaudeUsage([]byte(`{"five_hour":{"utilization":0},"seven_day":{"utilization":5},"limits":[]}`))
+	if err != nil || len(metrics) != 2 {
+		t.Fatalf("2 gösterge beklendi: %+v %v", metrics, err)
 	}
 }

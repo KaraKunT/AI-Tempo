@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"ai-tempo/internal/config"
@@ -14,17 +15,29 @@ func init() {
 	register(claudeProvider{})
 }
 
-// claudeUsageResponse, Claude.ai /api/organizations/{id}/usage endpoint'inin
-// yanıt gövdesinden ihtiyaç duyduğumuz alanları temsil eder.
+// claudeWindow, Claude.ai /api/organizations/{id}/usage yanıtındaki tek bir
+// kota penceresidir (five_hour, seven_day).
+type claudeWindow struct {
+	Utilization float64 `json:"utilization"`
+	ResetsAt    string  `json:"resets_at"`
+}
+
+// claudeUsageResponse, usage yanıtından ihtiyaç duyduğumuz alanlardır.
+// Model bazlı haftalık limitler (ör. Fable) yalnızca bazı hesaplarda,
+// limits dizisinde kind "weekly_scoped" kaydı olarak gelir.
 type claudeUsageResponse struct {
-	FiveHour struct {
-		Utilization float64 `json:"utilization"`
-		ResetsAt    string  `json:"resets_at"`
-	} `json:"five_hour"`
-	SevenDay struct {
-		Utilization float64 `json:"utilization"`
-		ResetsAt    string  `json:"resets_at"`
-	} `json:"seven_day"`
+	FiveHour claudeWindow `json:"five_hour"`
+	SevenDay claudeWindow `json:"seven_day"`
+	Limits   []struct {
+		Kind     string  `json:"kind"`
+		Percent  float64 `json:"percent"`
+		ResetsAt string  `json:"resets_at"`
+		Scope    *struct {
+			Model *struct {
+				DisplayName string `json:"display_name"`
+			} `json:"model"`
+		} `json:"scope"`
+	} `json:"limits"`
 }
 
 type claudeProvider struct{}
@@ -56,58 +69,59 @@ func (claudeProvider) Query(ctx context.Context, account config.Account) RateLim
 		return info
 	}
 
-	var response claudeUsageResponse
-	if err := json.Unmarshal(body, &response); err != nil {
+	metrics, err := parseClaudeUsage(body)
+	if err != nil {
 		info.Error = T("Veri parse hatası")
 		return info
+	}
+	info.Success = true
+	info.Metrics = metrics
+	return info
+}
+
+// parseClaudeUsage, usage yanıtından 5 saatlik, haftalık ve (hesapta varsa)
+// model bazlı haftalık limitleri (ör. Fable) göstergelere çevirir.
+func parseClaudeUsage(body []byte) ([]UsageMetric, error) {
+	var response claudeUsageResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+	metric := func(id, label, subtitle string, percent float64, resetsAt string, seconds int64) UsageMetric {
+		m := UsageMetric{ID: id, Label: label, Subtitle: subtitle, Percent: percent, TimeProgress: -1}
+		if resetsAt != "" {
+			m.ResetsInfo = formatResetTime(resetsAt)
+			if t, err := time.Parse(time.RFC3339, resetsAt); err == nil {
+				m.ResetsAt = t
+				m.TimeProgress = timeProgress(t, float64(seconds))
+				m.WindowStart = windowStart(t, seconds)
+			}
+		}
+		return m
 	}
 
 	const fiveHourSeconds = 5 * 3600
 	const sevenDaySeconds = 7 * 86400
 
-	var sessionEnd, weeklyEnd time.Time
-	sessionResets := ""
-	sessionTimeProgress := -1.0
-	if response.FiveHour.ResetsAt != "" {
-		sessionResets = formatResetTime(response.FiveHour.ResetsAt)
-		if t, err := time.Parse(time.RFC3339, response.FiveHour.ResetsAt); err == nil {
-			sessionEnd = t
-			sessionTimeProgress = timeProgress(t, fiveHourSeconds)
-		}
-	}
-	weeklyResets := ""
-	weeklyTimeProgress := -1.0
-	if response.SevenDay.ResetsAt != "" {
-		weeklyResets = formatResetTime(response.SevenDay.ResetsAt)
-		if t, err := time.Parse(time.RFC3339, response.SevenDay.ResetsAt); err == nil {
-			weeklyEnd = t
-			weeklyTimeProgress = timeProgress(t, sevenDaySeconds)
-		}
+	metrics := []UsageMetric{
+		metric("session", T("Mevcut Oturum"), T("Son 5 saatlik kullanım"),
+			response.FiveHour.Utilization, response.FiveHour.ResetsAt, fiveHourSeconds),
+		metric("weekly", T("Haftalık Limit"), T("Son 7 günlük kullanım"),
+			response.SevenDay.Utilization, response.SevenDay.ResetsAt, sevenDaySeconds),
 	}
 
-	info.Success = true
-	info.Metrics = []UsageMetric{
-		{
-			ID:           "session",
-			Label:        T("Mevcut Oturum"),
-			Subtitle:     T("Son 5 saatlik kullanım"),
-			Percent:      response.FiveHour.Utilization,
-			ResetsInfo:   sessionResets,
-			TimeProgress: sessionTimeProgress,
-			WindowStart:  windowStart(sessionEnd, fiveHourSeconds),
-			ResetsAt:     sessionEnd,
-		},
-		{
-			ID:           "weekly",
-			Label:        T("Haftalık Limit"),
-			Subtitle:     T("Son 7 günlük kullanım"),
-			Percent:      response.SevenDay.Utilization,
-			ResetsInfo:   weeklyResets,
-			TimeProgress: weeklyTimeProgress,
-			WindowStart:  windowStart(weeklyEnd, sevenDaySeconds),
-			ResetsAt:     weeklyEnd,
-		},
+	seen := map[string]bool{}
+	for _, l := range response.Limits {
+		if l.Kind != "weekly_scoped" || l.Scope == nil || l.Scope.Model == nil {
+			continue
+		}
+		name := strings.TrimSpace(l.Scope.Model.DisplayName)
+		id := "weekly_" + strings.ToLower(strings.ReplaceAll(name, " ", "_"))
+		if name == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		metrics = append(metrics, metric(id, Tf("%s Limiti", name), T("Son 7 günlük kullanım"),
+			l.Percent, l.ResetsAt, sevenDaySeconds))
 	}
-
-	return info
+	return metrics, nil
 }
